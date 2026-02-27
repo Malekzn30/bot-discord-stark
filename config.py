@@ -1,0 +1,2 @@
+TOKEN = ""  # Mets ton token ici
+AUTHORIZED_ROLE_ID = 1469665367881420841
