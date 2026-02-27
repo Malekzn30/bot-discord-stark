@@ -1,2 +1,4 @@
-TOKEN = ""  # Mets ton token ici
+import os
+
+TOKEN = os.getenv("DISCORD_TOKEN")
 AUTHORIZED_ROLE_ID = 1469665367881420841
