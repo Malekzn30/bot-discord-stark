@@ -1,51 +1,48 @@
 import nextcord
 from nextcord.ext import commands
-from config import AUTHORIZED_ROLE_ID
 
-def has_role():
-    async def predicate(ctx):
-        role = ctx.guild.get_role(AUTHORIZED_ROLE_ID)
-        return role in ctx.author.roles
-    return commands.check(predicate)
-
-class Moderation(commands.Cog):
+class Stats(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @commands.command(
-        name="lockchannel",
-        help="Verrouille un salon pour empêcher les membres d’envoyer des messages."
+        name="stats",
+        help="Affiche les statistiques du serveur."
     )
-    @has_role()
-    async def lockchannel(self, ctx, channel: nextcord.TextChannel = None):
-        channel = channel or ctx.channel
-        overwrite = channel.overwrites_for(ctx.guild.default_role)
-        overwrite.send_messages = False
-        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
-        await ctx.send(f"🔒 Salon verrouillé : {channel.mention}")
+    async def stats(self, ctx):
+        guild = ctx.guild
 
-    @commands.command(
-        name="unlockchannel",
-        help="Déverrouille un salon pour permettre aux membres d’envoyer des messages."
-    )
-    @has_role()
-    async def unlockchannel(self, ctx, channel: nextcord.TextChannel = None):
-        channel = channel or ctx.channel
-        overwrite = channel.overwrites_for(ctx.guild.default_role)
-        overwrite.send_messages = True
-        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
-        await ctx.send(f"🔓 Salon déverrouillé : {channel.mention}")
+        # Membres totaux
+        total_members = guild.member_count
 
-    @commands.command(
-        name="say",
-        help="Fait parler le bot dans le salon actuel."
-    )
-    @has_role()
-    async def say(self, ctx, *, message=None):
-        if not message:
-            return await ctx.send("Utilise : `+say <message>`")
-        await ctx.send(message)
-        await ctx.message.delete()
+        # Membres en ligne
+        online_members = sum(
+            1 for m in guild.members 
+            if m.status in (nextcord.Status.online, nextcord.Status.idle, nextcord.Status.dnd)
+        )
+
+        # Membres en vocal
+        voice_members = sum(len(vc.members) for vc in guild.voice_channels)
+
+        # Boosts
+        boosts = guild.premium_subscription_count
+
+        # Embed
+        embed = nextcord.Embed(
+            title=f"📊 Statistiques du serveur : {guild.name}",
+            color=0x2F3136
+        )
+
+        embed.add_field(name="👥 Membres totaux", value=total_members, inline=True)
+        embed.add_field(name="🟢 Membres en ligne", value=online_members, inline=True)
+        embed.add_field(name="🔊 Membres en vocal", value=voice_members, inline=True)
+        embed.add_field(name="🚀 Boosts", value=boosts, inline=True)
+
+        embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
+        embed.set_footer(text=f"Demandé par {ctx.author}", icon_url=ctx.author.avatar.url)
+
+        await ctx.send(embed=embed)
 
 def setup(bot):
-    bot.add_cog(Moderation(bot))
+    bot.add_cog(Stats(bot))
+
