@@ -56,100 +56,68 @@ class CategorySelect(ui.Select):
         category = self.values[0]
 
         # ============================
-        # LISTES DE COMMANDES
+        # LISTES DE COMMANDES + DESCRIPTIONS
         # ============================
 
         commands_dict = {
-        "🎙️ Vocal": {
-        "moove": "Déplace un utilisateur vers un autre salon vocal.",
-        "move": "Alias de moove.",
-        "mooveusers": "Déplace plusieurs utilisateurs sélectionnés.",
-        "mooverandom": "Déplace un utilisateur aléatoire.",
-        "mooverandomusers": "Déplace plusieurs utilisateurs aléatoires.",
-        "mooveall": "Déplace tous les utilisateurs du salon.",
-        "mooveallrandom": "Déplace tout le monde vers des salons aléatoires.",
-        "mooveserver": "Déplace tout le serveur vers un salon.",
-        "back": "Ramène les utilisateurs à leur salon précédent.",
+            "🎙️ Vocal": {
+                "moove": "Déplace un utilisateur vers un autre salon vocal.",
+                "move": "Alias de moove.",
+                "mooveusers": "Déplace plusieurs utilisateurs sélectionnés.",
+                "mooverandom": "Déplace un utilisateur aléatoirement.",
+                "mooverandomusers": "Déplace plusieurs utilisateurs aléatoires.",
+                "mooveall": "Déplace tous les utilisateurs du salon.",
+                "mooveallrandom": "Déplace tous les utilisateurs aléatoirement.",
+                "mooveeveryone": "Déplace tout le serveur vers un salon.",
+                "back": "Ramène les utilisateurs à leur salon précédent.",
 
-        "shuffle start": "Commence un shuffle vocal (déplacements aléatoires).",
-        "shufflestop": "Arrête le shuffle vocal.",
+                "shuffle start": "Commence un shuffle vocal.",
+                "shufflestop": "Arrête le shuffle vocal.",
 
-        "rotateusers": "Fait tourner les utilisateurs entre les salons.",
-        "rotateall": "Fait tourner tout le monde.",
-        "rotaterandom": "Rotation aléatoire.",
-        "rotategroups": "Rotation par groupes.",
+                "rotateusers": "Fait tourner les utilisateurs entre les salons.",
+                "rotateall": "Fait tourner tout le monde.",
+                "rotationrandom": "Rotation aléatoire.",
+                "rotationgroups": "Rotation par groupes.",
 
-        "randompair": "Crée des paires aléatoires.",
-        "randomteams": "Crée des équipes aléatoires.",
-        "randomsplit": "Sépare en deux groupes.",
-        "randomassign": "Assigne aléatoirement des utilisateurs.",
+                "randompair": "Crée des paires aléatoires.",
+                "randomteams": "Crée des équipes aléatoires."
+            },
 
-        "clearvoice": "Vide un salon vocal.",
-        "clearcategory": "Vide toute une catégorie vocale.",
-        "lockvoice": "Verrouille un salon vocal.",
-        "unlockvoice": "Déverrouille un salon vocal.",
-        "muteall": "Mute tout le monde.",
-        "unmuteall": "Unmute tout le monde.",
-        "deafenall": "Rend tout le monde sourd.",
-        "undeafenall": "Rend tout le monde audible.",
+            "🛡️ Modération": {
+                "lockchannel": "Verrouille un salon texte.",
+                "unlockchannel": "Déverrouille un salon texte.",
+                "say": "Fait parler le bot."
+            },
 
-        "spin": "Fait tourner un utilisateur.",
-        "spinall": "Fait tourner tout le monde.",
-        "randomtp": "Téléporte un utilisateur aléatoire.",
-        "russianroulette": "Kick vocal aléatoire.",
-        "randomkickvoice": "Kick vocal aléatoire.",
+            "🎮 Jeux": {
+                "devinelenombre": "Jeu : devine le nombre."
+            },
 
-        "autobalance": "Équilibre automatiquement les salons.",
-        "autoregroup": "Regroupe automatiquement.",
-        "autosplit": "Sépare automatiquement.",
-        "autosort": "Trie automatiquement.",
+            "📊 Système": {
+                "stat": "Affiche les statistiques du bot."
+            }
+        }
 
-        "nukevoice": "Nuke un salon vocal.",
-        "nukecategory": "Nuke une catégorie.",
-        "nukerandom": "Nuke aléatoire.",
-        "nukeshuffle": "Nuke + shuffle.",
-
-        "voicestats": "Affiche les statistiques vocales.",
-        "movelog": "Affiche les logs de déplacement.",
-        "whoisvoice": "Montre où se trouve un utilisateur.",
-        "listvoice": "Liste les utilisateurs en vocal.",
-
-        "joinme": "Fait rejoindre le bot ton salon.",
-        "join": "Fait rejoindre le bot un salon.",
-        "leave": "Fait quitter le bot."
-    },
-
-    "🛡️ Modération": {
-        "lockchannel": "Verrouille un salon texte.",
-        "unlockchannel": "Déverrouille un salon texte.",
-        "say": "Fait parler le bot."
-    },
-
-    "🎮 Jeux": {
-        "devinelenombre": "Jeu : devine le nombre."
-    },
-
-    "📊 Système": {
-        "stat": "Affiche les statistiques du bot."
-    }
-}
-
-
-        cmds = commands_dict[category]
+        cmds = list(commands_dict[category].items())
 
         # ============================
         # PAGINATION AUTOMATIQUE
         # ============================
 
         pages = []
-        per_page = 15  # AUGMENTÉ pour la catégorie vocal
+        per_page = 10
 
         for i in range(0, len(cmds), per_page):
             chunk = cmds[i:i + per_page]
 
+            description = "\n".join(
+                f"**`{name}`** — {desc}"
+                for name, desc in chunk
+            )
+
             embed = nextcord.Embed(
                 title=f"{category} — Page {len(pages)+1}",
-                description="\n".join(f"`{c}`" for c in chunk),
+                description=description,
                 color=0x3498db
             )
 
