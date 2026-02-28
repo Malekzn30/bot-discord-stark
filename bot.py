@@ -23,6 +23,31 @@ def load_cogs():
             bot.load_extension(f"cogs.{file[:-3]}")
             print(f"[+] Cog chargé : {file}")
 
+# ============================================================
+# KEEP ALIVE SERVER (Render fix)
+# ============================================================
+
+from threading import Thread
+from flask import Flask
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is alive"
+
+def run():
+    app.run(host="0.0.0.0", port=10000)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+keep_alive()
+
+# ============================================================
+# START BOT
+# ============================================================
+
 load_cogs()
 bot.run(TOKEN)
-
