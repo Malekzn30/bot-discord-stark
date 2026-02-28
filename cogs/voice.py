@@ -19,58 +19,87 @@ def embed_msg(title, desc, color=0x3498db):
 def format_channel(ch):
     return f"🔊 **{ch.name}**"
 
+
 class Voice(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # ============================
-    # MOOVE ALL RANDOM
-    # ============================
-    @commands.command(name="mooveallrandom")
+    # ============================================================
+    # 1) MOOVE 1 PERSONNE → 1 SALON
+    # ============================================================
+    @commands.command(name="moove", aliases=["move"])
     @has_role()
-    async def mooveallrandom(self, ctx, category_id: int = None):
-        if not ctx.author.voice:
-            return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+    async def moove(self, ctx, member: nextcord.Member = None, channel: nextcord.VoiceChannel = None):
+        if not member or not channel:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+moove @user #salon`", 0xff0000))
 
-        if not category_id:
-            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+mooveallrandom <ID_CAT>`", 0xff0000))
+        if not member.voice:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Ce membre n'est pas en vocal.", 0xff0000))
 
-        cat = ctx.guild.get_channel(category_id)
-        if not isinstance(cat, nextcord.CategoryChannel):
-            return await ctx.send(embed=embed_msg("❌ Catégorie invalide", "L’ID fourni n’est pas une catégorie.", 0xff0000))
+        old = member.voice.channel
+        await member.move_to(channel)
+        last_moves[member.id] = old.id
 
-        vcs = [c for c in cat.channels if isinstance(c, nextcord.VoiceChannel)]
-        members = list(ctx.author.voice.channel.members)
-        random.shuffle(members)
+        await ctx.send(embed=embed_msg("🚚 Déplacé", f"{member.mention} → {format_channel(channel)}"))
 
-        for m, ch in zip(members, vcs):
-            old = m.voice.channel
-            await m.move_to(ch)
-            last_moves[m.id] = old.id
-
-        await ctx.send(embed=embed_msg("🎲 Répartition effectuée", "Tous les membres ont été déplacés."))
-
-    # ============================
-    # JOINME
-    # ============================
-    @commands.command(name="joinme")
-    @has_role()
-    async def joinme(self, ctx):
-        if not ctx.author.voice:
-            return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
-
-        channel = ctx.author.voice.channel
-        await ctx.send(embed=embed_msg("🎧 Connexion", f"Connexion au salon `{channel.id}`"))
-        await channel.connect()
-
-    # ============================
-    # MOOVE USERS
-    # ============================
+    # ============================================================
+    # 2) MOOVE PLUSIEURS PERSONNES → 1 SALON
+    # ============================================================
     @commands.command(name="mooveusers")
     @has_role()
     async def mooveusers(self, ctx, *args):
         if len(args) < 2:
-            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+mooveusers @u1 @u2 <ID_CAT>`", 0xff0000))
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+mooveusers @u1 @u2 ... #salon`", 0xff0000))
+
+        channel = ctx.message.channel_mentions[-1]
+        mentions = ctx.message.mentions
+
+        if not channel or not isinstance(channel, nextcord.VoiceChannel):
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Le dernier argument doit être un salon vocal.", 0xff0000))
+
+        if not mentions:
+            return await ctx.send(embed=embed_msg("❌ Aucun membre", "Mentionne au moins 1 membre.", 0xff0000))
+
+        moved = 0
+        for m in mentions:
+            if m.voice:
+                old = m.voice.channel
+                await m.move_to(channel)
+                last_moves[m.id] = old.id
+                moved += 1
+
+        await ctx.send(embed=embed_msg("🚚 Déplacement effectué", f"{moved} membres → {format_channel(channel)}"))
+
+    # ============================================================
+    # 3) MOOVE 1 PERSONNE → RANDOM CATÉGORIE
+    # ============================================================
+    @commands.command(name="mooverandom")
+    @has_role()
+    async def mooverandom(self, ctx, member: nextcord.Member = None, category_id: int = None):
+        if not member or not category_id:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+mooverandom @user <ID_CAT>`", 0xff0000))
+
+        if not member.voice:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Ce membre n'est pas en vocal.", 0xff0000))
+
+        cat = ctx.guild.get_channel(category_id)
+        vcs = [c for c in cat.channels if isinstance(c, nextcord.VoiceChannel)]
+
+        target = random.choice(vcs)
+        old = member.voice.channel
+        await member.move_to(target)
+        last_moves[member.id] = old.id
+
+        await ctx.send(embed=embed_msg("🎲 Déplacement aléatoire", f"{member.mention} → {format_channel(target)}"))
+
+    # ============================================================
+    # 4) MOOVE PLUSIEURS PERSONNES → RANDOM CATÉGORIE (NOUVEAU)
+    # ============================================================
+    @commands.command(name="mooverandomusers")
+    @has_role()
+    async def mooverandomusers(self, ctx, *args):
+        if len(args) < 2:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+mooverandomusers @u1 @u2 ... <ID_CAT>`", 0xff0000))
 
         try:
             cat_id = int(args[-1])
@@ -83,18 +112,21 @@ class Voice(commands.Cog):
 
         cat = ctx.guild.get_channel(cat_id)
         vcs = [c for c in cat.channels if isinstance(c, nextcord.VoiceChannel)]
-        random.shuffle(mentions)
 
-        for m, ch in zip(mentions, vcs):
-            old = m.voice.channel
-            await m.move_to(ch)
-            last_moves[m.id] = old.id
+        moved = 0
+        for m in mentions:
+            if m.voice:
+                target = random.choice(vcs)
+                old = m.voice.channel
+                await m.move_to(target)
+                last_moves[m.id] = old.id
+                moved += 1
 
-        await ctx.send(embed=embed_msg("🎲 Répartition effectuée", "Les membres ont été déplacés."))
+        await ctx.send(embed=embed_msg("🎲 Random effectué", f"{moved} membres déplacés aléatoirement."))
 
-    # ============================
-    # MOOVE ALL
-    # ============================
+    # ============================================================
+    # 5) MOOVE TOUTE LA VOCAL → 1 SALON
+    # ============================================================
     @commands.command(name="mooveall")
     @has_role()
     async def mooveall(self, ctx, channel: nextcord.VoiceChannel = None):
@@ -104,51 +136,84 @@ class Voice(commands.Cog):
         if not channel:
             return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+mooveall #salon`", 0xff0000))
 
+        moved = 0
         for m in ctx.author.voice.channel.members:
             old = m.voice.channel
             await m.move_to(channel)
             last_moves[m.id] = old.id
+            moved += 1
 
-        await ctx.send(embed=embed_msg("🚚 Déplacement effectué", f"Tous les membres → {format_channel(channel)}"))
+        await ctx.send(embed=embed_msg("🚚 Déplacement effectué", f"{moved} membres → {format_channel(channel)}"))
 
-        # ============================
-    # MOOVE (avec alias MOVE)
-    # ============================
-    @commands.command(name="moove", aliases=["move"])
+    # ============================================================
+    # 6) MOOVE TOUTE LA VOCAL → RANDOM CATÉGORIE (AMÉLIORÉ)
+    # ============================================================
+    @commands.command(name="mooveallrandom")
     @has_role()
-    async def moove(self, ctx, member: nextcord.Member = None, channel: nextcord.VoiceChannel = None):
-        if not member or not channel:
-            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+moove @user #salon`", 0xff0000))
+    async def mooveallrandom(self, ctx, category_id: int = None):
+        if not ctx.author.voice:
+            return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
 
-        old = member.voice.channel
-        await member.move_to(channel)
-        last_moves[member.id] = old.id
-
-        await ctx.send(embed=embed_msg("🚚 Déplacé", f"{member.mention} → {format_channel(channel)}"))
-
-
-    # ============================
-    # MOOVE RANDOM
-    # ============================
-    @commands.command(name="mooverandom")
-    @has_role()
-    async def mooverandom(self, ctx, member: nextcord.Member = None, category_id: int = None):
-        if not member or not category_id:
-            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+mooverandom @user <ID_CAT>`", 0xff0000))
+        if not category_id:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+mooveallrandom <ID_CAT>`", 0xff0000))
 
         cat = ctx.guild.get_channel(category_id)
         vcs = [c for c in cat.channels if isinstance(c, nextcord.VoiceChannel)]
 
-        target = random.choice(vcs)
-        old = member.voice.channel
-        await member.move_to(target)
-        last_moves[member.id] = old.id
+        members = list(ctx.author.voice.channel.members)
+        moved = 0
 
-        await ctx.send(embed=embed_msg("🎲 Déplacement aléatoire", f"{member.mention} → {format_channel(target)}"))
+        for m in members:
+            target = random.choice(vcs)
+            old = m.voice.channel
+            await m.move_to(target)
+            last_moves[m.id] = old.id
+            moved += 1
 
-    # ============================
-    # SHUFFLE START
-    # ============================
+        await ctx.send(embed=embed_msg("🎲 Random effectué", f"{moved} membres déplacés aléatoirement."))
+
+    # ============================================================
+    # 7) MOOVE TOUT LE SERVEUR → 1 SALON
+    # ============================================================
+    @commands.command(name="mooveserver")
+    @has_role()
+    async def mooveserver(self, ctx, channel: nextcord.VoiceChannel = None):
+        if not channel:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+mooveserver #salon`", 0xff0000))
+
+        moved = 0
+        for m in ctx.guild.members:
+            if m.voice and m.voice.channel:
+                old = m.voice.channel
+                await m.move_to(channel)
+                last_moves[m.id] = old.id
+                moved += 1
+
+        await ctx.send(embed=embed_msg("🌐 Moove serveur", f"{moved} membres déplacés → {format_channel(channel)}"))
+
+    # ============================================================
+    # 8) BACK
+    # ============================================================
+    @commands.command(name="back")
+    @has_role()
+    async def back(self, ctx):
+        if not last_moves:
+            return await ctx.send(embed=embed_msg("❌ Aucun déplacement", "Aucun membre à renvoyer.", 0xff0000))
+
+        count = 0
+        for mid, old_id in list(last_moves.items()):
+            member = ctx.guild.get_member(mid)
+            old_ch = ctx.guild.get_channel(old_id)
+            if member and member.voice:
+                await member.move_to(old_ch)
+                count += 1
+
+        last_moves.clear()
+        await ctx.send(embed=embed_msg("🔙 Retour effectué", f"{count} membres renvoyés."))
+
+    # ============================================================
+    # 9) SHUFFLE / STOP
+    # ============================================================
     @commands.command(name="shuffle")
     @has_role()
     async def shuffle(self, ctx, mode=None, member: nextcord.Member = None, category_id: int = None):
@@ -169,7 +234,7 @@ class Voice(commands.Cog):
                 try:
                     target = random.choice(vcs)
                     await member.move_to(target)
-                    await asyncio.sleep(0.1)  # 10 moves/sec
+                    await asyncio.sleep(0.1)
                 except:
                     break
 
@@ -178,9 +243,6 @@ class Voice(commands.Cog):
 
         await ctx.send(embed=embed_msg("🔄 Shuffle lancé", f"{member.mention} est maintenant en shuffle."))
 
-    # ============================
-    # SHUFFLE STOP
-    # ============================
     @commands.command(name="shufflestop")
     @has_role()
     async def shufflestop(self, ctx):
@@ -193,76 +255,6 @@ class Voice(commands.Cog):
 
         await ctx.send(embed=embed_msg("🛑 Shuffle arrêté", "Tous les shuffles ont été stoppés."))
 
-    # ============================
-    # BACK
-    # ============================
-    @commands.command(name="back")
-    @has_role()
-    async def back(self, ctx):
-        if not last_moves:
-            return await ctx.send(embed=embed_msg("❌ Aucun déplacement", "Aucun membre à renvoyer.", 0xff0000))
-
-        for mid, old_id in list(last_moves.items()):
-            member = ctx.guild.get_member(mid)
-            old_ch = ctx.guild.get_channel(old_id)
-            if member and member.voice:
-                await member.move_to(old_ch)
-
-        last_moves.clear()
-        await ctx.send(embed=embed_msg("🔙 Retour effectué", "Tous les membres ont été renvoyés."))
-
-    # ============================
-    # MOOVE SERVER
-    # ============================
-    @commands.command(name="mooveserver")
-    @has_role()
-    async def mooveserver(self, ctx, channel: nextcord.VoiceChannel = None):
-        if not channel:
-            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+mooveserver #salon`", 0xff0000))
-
-        count = 0
-        for m in ctx.guild.members:
-            if m.voice and m.voice.channel:
-                old = m.voice.channel
-                await m.move_to(channel)
-                last_moves[m.id] = old.id
-                count += 1
-
-        await ctx.send(embed=embed_msg("🌐 Moove serveur", f"{count} membres déplacés → {format_channel(channel)}"))
-
-    # ============================
-    # JOIN (ID)
-    # ============================
-    @commands.command(name="join")
-    @has_role()
-    async def join(self, ctx, channel_id: int = None):
-        if not channel_id:
-            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+join <ID>`", 0xff0000))
-
-        channel = ctx.guild.get_channel(channel_id)
-        if not channel or not isinstance(channel, nextcord.VoiceChannel):
-            return await ctx.send(embed=embed_msg("❌ Salon invalide", "Aucun salon vocal trouvé.", 0xff0000))
-
-        await ctx.send(embed=embed_msg("🎧 Connexion", f"Connexion au salon `{channel.id}`"))
-        await channel.connect()
-
-    # ============================
-    # LEAVE
-    # ============================
-    @commands.command(name="leave")
-    @has_role()
-    async def leave(self, ctx):
-        voice_client = ctx.guild.voice_client
-
-        if not voice_client:
-            return await ctx.send(embed=embed_msg("❌ Impossible", "Le bot n'est dans aucun vocal.", 0xff0000))
-
-        cid = voice_client.channel.id
-        await ctx.send(embed=embed_msg("👋 Déconnexion", f"Le bot quitte `{cid}`"))
-
-        await voice_client.disconnect(force=True)
-        voice_client.cleanup()
 
 def setup(bot):
     bot.add_cog(Voice(bot))
-
