@@ -60,52 +60,80 @@ class CategorySelect(ui.Select):
         # ============================
 
         commands_dict = {
-            "🎙️ Vocal": [
-                # Déplacements
-                "moove", "move", "mooveusers", "mooverandom", "mooverandomusers",
-                "mooveall", "mooveallrandom", "mooveserver", "back",
+        "🎙️ Vocal": {
+        "moove": "Déplace un utilisateur vers un autre salon vocal.",
+        "move": "Alias de moove.",
+        "mooveusers": "Déplace plusieurs utilisateurs sélectionnés.",
+        "mooverandom": "Déplace un utilisateur aléatoire.",
+        "mooverandomusers": "Déplace plusieurs utilisateurs aléatoires.",
+        "mooveall": "Déplace tous les utilisateurs du salon.",
+        "mooveallrandom": "Déplace tout le monde vers des salons aléatoires.",
+        "mooveserver": "Déplace tout le serveur vers un salon.",
+        "back": "Ramène les utilisateurs à leur salon précédent.",
 
-                # Shuffle
-                "shuffle start", "shufflestop",
+        "shuffle start": "Commence un shuffle vocal (déplacements aléatoires).",
+        "shufflestop": "Arrête le shuffle vocal.",
 
-                # Rotation
-                "rotateusers", "rotateall", "rotaterandom", "rotategroups",
+        "rotateusers": "Fait tourner les utilisateurs entre les salons.",
+        "rotateall": "Fait tourner tout le monde.",
+        "rotaterandom": "Rotation aléatoire.",
+        "rotategroups": "Rotation par groupes.",
 
-                # Random teams / split / assign
-                "randompair", "randomteams", "randomsplit", "randomassign",
+        "randompair": "Crée des paires aléatoires.",
+        "randomteams": "Crée des équipes aléatoires.",
+        "randomsplit": "Sépare en deux groupes.",
+        "randomassign": "Assigne aléatoirement des utilisateurs.",
 
-                # Gestion vocale
-                "clearvoice", "clearcategory", "lockvoice", "unlockvoice",
-                "muteall", "unmuteall", "deafenall", "undeafenall",
+        "clearvoice": "Vide un salon vocal.",
+        "clearcategory": "Vide toute une catégorie vocale.",
+        "lockvoice": "Verrouille un salon vocal.",
+        "unlockvoice": "Déverrouille un salon vocal.",
+        "muteall": "Mute tout le monde.",
+        "unmuteall": "Unmute tout le monde.",
+        "deafenall": "Rend tout le monde sourd.",
+        "undeafenall": "Rend tout le monde audible.",
 
-                # Fun / troll
-                "spin", "spinall", "randomtp", "russianroulette", "randomkickvoice",
+        "spin": "Fait tourner un utilisateur.",
+        "spinall": "Fait tourner tout le monde.",
+        "randomtp": "Téléporte un utilisateur aléatoire.",
+        "russianroulette": "Kick vocal aléatoire.",
+        "randomkickvoice": "Kick vocal aléatoire.",
 
-                # Auto
-                "autobalance", "autoregroup", "autosplit", "autosort",
+        "autobalance": "Équilibre automatiquement les salons.",
+        "autoregroup": "Regroupe automatiquement.",
+        "autosplit": "Sépare automatiquement.",
+        "autosort": "Trie automatiquement.",
 
-                # Nuke
-                "nukevoice", "nukecategory", "nukerandom", "nukeshuffle",
+        "nukevoice": "Nuke un salon vocal.",
+        "nukecategory": "Nuke une catégorie.",
+        "nukerandom": "Nuke aléatoire.",
+        "nukeshuffle": "Nuke + shuffle.",
 
-                # Stats / logs / utils
-                "voicestats", "movelog", "whoisvoice", "listvoice",
+        "voicestats": "Affiche les statistiques vocales.",
+        "movelog": "Affiche les logs de déplacement.",
+        "whoisvoice": "Montre où se trouve un utilisateur.",
+        "listvoice": "Liste les utilisateurs en vocal.",
 
-                # Bot actions
-                "joinme", "join", "leave"
-            ],
+        "joinme": "Fait rejoindre le bot ton salon.",
+        "join": "Fait rejoindre le bot un salon.",
+        "leave": "Fait quitter le bot."
+    },
 
-            "🛡️ Modération": [
-                "lockchannel", "unlockchannel", "say"
-            ],
+    "🛡️ Modération": {
+        "lockchannel": "Verrouille un salon texte.",
+        "unlockchannel": "Déverrouille un salon texte.",
+        "say": "Fait parler le bot."
+    },
 
-            "🎮 Jeux": [
-                "devinelenombre"
-            ],
+    "🎮 Jeux": {
+        "devinelenombre": "Jeu : devine le nombre."
+    },
 
-            "📊 Système": [
-                "stat"
-            ]
-        }
+    "📊 Système": {
+        "stat": "Affiche les statistiques du bot."
+    }
+}
+
 
         cmds = commands_dict[category]
 
