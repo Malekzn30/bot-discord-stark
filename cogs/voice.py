@@ -1008,7 +1008,48 @@ class Voice(commands.Cog):
             desc += "\n"
 
         await ctx.send(embed=embed_msg("📋 Liste des vocaux", desc))
-       
+    # ============================================================
+    # JOINME → Le bot rejoint le salon de l'auteur
+    # ============================================================
+    @commands.command(name="joinme")
+    @has_role()
+    async def joinme(self, ctx):
+        if ctx.author.voice is None:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Tu dois être dans un salon vocal."))
+
+        channel = ctx.author.voice.channel
+        await channel.connect()
+        await ctx.send(embed=embed_msg("✅ Vocal", f"J'ai rejoint **{channel.name}**."))
+
+    # ============================================================
+    # JOIN → Le bot rejoint un salon via son ID
+    # ============================================================
+    @commands.command(name="join")
+    @has_role()
+    async def join(self, ctx, channel_id: int = None):
+        if channel_id is None:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+join <ID_SALON>`"))
+
+        channel = ctx.guild.get_channel(channel_id)
+
+        if channel is None or not isinstance(channel, nextcord.VoiceChannel):
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Salon vocal introuvable."))
+
+        await channel.connect()
+        await ctx.send(embed=embed_msg("✅ Vocal", f"J'ai rejoint **{channel.name}**."))
+
+    # ============================================================
+    # LEAVE → Le bot quitte le salon vocal
+    # ============================================================
+    @commands.command(name="leave")
+    @has_role()
+    async def leave(self, ctx):
+        if ctx.voice_client is None:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Je ne suis dans aucun salon vocal."))
+
+        await ctx.voice_client.disconnect()
+        await ctx.send(embed=embed_msg("👋 Déconnexion", "J'ai quitté le salon vocal."))
+
 
 def setup(bot):
     bot.add_cog(Voice(bot))
