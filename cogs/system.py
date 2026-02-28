@@ -1,9 +1,7 @@
 import nextcord
 from nextcord.ext import commands
-import time
+from nextcord import ui
 from config import AUTHORIZED_ROLE_ID
-
-start_time = time.time()
 
 def has_role():
     async def predicate(ctx):
@@ -11,90 +9,138 @@ def has_role():
         return role in ctx.author.roles
     return commands.check(predicate)
 
+# ============================================================
+# PAGINATION VIEW
+# ============================================================
+
+class PageView(ui.View):
+    def __init__(self, pages):
+        super().__init__(timeout=None)
+        self.pages = pages
+        self.index = 0
+
+    @ui.button(label="⬅️", style=nextcord.ButtonStyle.primary)
+    async def previous(self, button, interaction):
+        self.index = (self.index - 1) % len(self.pages)
+        await interaction.response.edit_message(embed=self.pages[self.index], view=self)
+
+    @ui.button(label="➡️", style=nextcord.ButtonStyle.primary)
+    async def next(self, button, interaction):
+        self.index = (self.index + 1) % len(self.pages)
+        await interaction.response.edit_message(embed=self.pages[self.index], view=self)
+
+
+# ============================================================
+# MENU DÉROULANT
+# ============================================================
+
+class CategorySelect(ui.Select):
+    def __init__(self, bot):
+        self.bot = bot
+
+        options = [
+            nextcord.SelectOption(label="🎙️ Vocal", description="Commandes vocales"),
+            nextcord.SelectOption(label="🛡️ Modération", description="Commandes de modération"),
+            nextcord.SelectOption(label="🎮 Jeux", description="Commandes de jeux"),
+            nextcord.SelectOption(label="📊 Système", description="Commandes système"),
+        ]
+
+        super().__init__(
+            placeholder="Choisis une catégorie…",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
+
+    async def callback(self, interaction: nextcord.Interaction):
+        category = self.values[0]
+
+        # ============================
+        # LISTES DE COMMANDES
+        # ============================
+
+        commands_dict = {
+            "🎙️ Vocal": [
+                "mooveallrandom", "mooveusers", "moove", "move", "mooverandom",
+                "mooveall", "shuffle start", "shufflestop", "back",
+                "mooveserver", "joinme", "join", "leave"
+            ],
+            "🛡️ Modération": [
+                "lockchannel", "unlockchannel", "say"
+            ],
+            "🎮 Jeux": [
+                "devinelenombre"
+            ],
+            "📊 Système": [
+                "stat"
+            ]
+        }
+
+        cmds = commands_dict[category]
+
+        # ============================
+        # PAGINATION AUTOMATIQUE
+        # ============================
+
+        pages = []
+        per_page = 6  # nombre de commandes par page
+
+        for i in range(0, len(cmds), per_page):
+            chunk = cmds[i:i + per_page]
+
+            embed = nextcord.Embed(
+                title=f"{category} — Page {len(pages)+1}",
+                description="\n".join(f"`{c}`" for c in chunk),
+                color=0x3498db
+            )
+
+            pages.append(embed)
+
+        # ============================
+        # ENVOI AVEC PAGINATION
+        # ============================
+
+        await interaction.response.edit_message(
+            embed=pages[0],
+            view=PageView(pages)
+        )
+
+
+class HelpView(ui.View):
+    def __init__(self, bot):
+        super().__init__(timeout=None)
+        self.add_item(CategorySelect(bot))
+
+
+# ============================================================
+# COG SYSTEM
+# ============================================================
+
 class System(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @commands.command(name="help")
     @has_role()
-    async def help(self, ctx, *, query=None):
-        # ============================
-        # HELP GENERAL
-        # ============================
-        if query is None:
-            embed = nextcord.Embed(
-                title="📘 Aide du bot",
-                description="Utilise `+help <commande>` pour plus d'informations.",
-                color=0x3498db
-            )
-
-            embed.add_field(
-                name="🎙️ Vocal",
-                value=(
-                    "`mooveallrandom`, `mooveusers`, `moove`, `move`, `mooverandom`, `mooveall`,\n"
-                    "`shuffle start`, `shufflestop`, `back`, `mooveserver`,\n"
-                    "`joinme`, `join`, `leave`"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
-                name="🛡️ Modération",
-                value="`lockchannel`, `unlockchannel`, `say`",
-                inline=False
-            )
-
-            embed.add_field(
-                name="🎮 Jeux",
-                value="`devinelenombre`",
-                inline=False
-            )
-
-            embed.add_field(
-                name="📊 Système",
-                value="`stat`",
-                inline=False
-            )
-
-            return await ctx.send(embed=embed)
-
-        # ============================
-        # HELP POUR UNE COMMANDE
-        # ============================
-        command = self.bot.get_command(query)
-
-        if command is None:
-            return await ctx.send("❌ Commande inconnue.")
-
+    async def help(self, ctx):
         embed = nextcord.Embed(
-            title=f"ℹ️ Aide : `{command.name}`",
+            title="📘 Aide du bot",
+            description="Choisis une catégorie dans le menu ci‑dessous.",
             color=0x3498db
         )
 
-        embed.add_field(
-            name="Description",
-            value=command.help or "Aucune description disponible.",
-            inline=False
-        )
-
-        embed.add_field(
-            name="Utilisation",
-            value=f"`+{command.name} {command.signature}`",
-            inline=False
-        )
-
-        return await ctx.send(embed=embed)
+        await ctx.send(embed=embed, view=HelpView(self.bot))
 
     @commands.command(name="stat")
     @has_role()
     async def stat(self, ctx):
-        uptime = int(time.time() - start_time)
+        import time
+        uptime = int(time.time() - self.bot.start_time)
         embed = nextcord.Embed(title="📊 Statistiques", color=0x3498db)
         embed.add_field(name="Uptime", value=f"{uptime} sec")
         embed.add_field(name="Ping", value=f"{round(self.bot.latency * 1000)} ms")
         await ctx.send(embed=embed)
 
+
 def setup(bot):
     bot.add_cog(System(bot))
-
-
