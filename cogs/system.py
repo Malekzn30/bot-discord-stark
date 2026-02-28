@@ -61,16 +61,47 @@ class CategorySelect(ui.Select):
 
         commands_dict = {
             "🎙️ Vocal": [
-                "mooveallrandom", "mooveusers", "moove", "move", "mooverandom",
-                "mooveall", "shuffle start", "shufflestop", "back",
-                "mooveserver", "joinme", "join", "leave"
+                # Déplacements
+                "moove", "move", "mooveusers", "mooverandom", "mooverandomusers",
+                "mooveall", "mooveallrandom", "mooveserver", "back",
+
+                # Shuffle
+                "shuffle start", "shufflestop",
+
+                # Rotation
+                "rotateusers", "rotateall", "rotaterandom", "rotategroups",
+
+                # Random teams / split / assign
+                "randompair", "randomteams", "randomsplit", "randomassign",
+
+                # Gestion vocale
+                "clearvoice", "clearcategory", "lockvoice", "unlockvoice",
+                "muteall", "unmuteall", "deafenall", "undeafenall",
+
+                # Fun / troll
+                "spin", "spinall", "randomtp", "russianroulette", "randomkickvoice",
+
+                # Auto
+                "autobalance", "autoregroup", "autosplit", "autosort",
+
+                # Nuke
+                "nukevoice", "nukecategory", "nukerandom", "nukeshuffle",
+
+                # Stats / logs / utils
+                "voicestats", "movelog", "whoisvoice", "listvoice",
+
+                # Bot actions
+                "joinme", "join", "leave"
             ],
+
             "🛡️ Modération": [
                 "lockchannel", "unlockchannel", "say"
             ],
+
             "🎮 Jeux": [
                 "devinelenombre"
             ],
+
             "📊 Système": [
                 "stat"
             ]
@@ -83,7 +114,7 @@ class CategorySelect(ui.Select):
         # ============================
 
         pages = []
-        per_page = 6  # nombre de commandes par page
+        per_page = 15  # AUGMENTÉ pour la catégorie vocal
 
         for i in range(0, len(cmds), per_page):
             chunk = cmds[i:i + per_page]
