@@ -211,33 +211,40 @@ class Voice(commands.Cog):
         last_moves.clear()
         await ctx.send(embed=embed_msg("🔙 Retour effectué", f"{count} membres renvoyés."))
 
-    # ============================================================
+        # ============================================================
     # 9) SHUFFLE / STOP
     # ============================================================
     @commands.command(name="shuffle")
     @has_role()
     async def shuffle(self, ctx, mode=None, member: nextcord.Member = None, category_id: int = None):
+        # Vérification de la commande
         if mode != "start":
             return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+shuffle start @user <ID_CAT>`", 0xff0000))
 
         if not member or not category_id:
             return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+shuffle start @user <ID_CAT>`", 0xff0000))
 
+        # Déjà en shuffle ?
         if member.id in shuffle_tasks:
             return await ctx.send(embed=embed_msg("⚠️ Déjà actif", "Ce membre est déjà en shuffle.", 0xffa500))
 
+        # Récupération des salons
         cat = ctx.guild.get_channel(category_id)
         vcs = [c for c in cat.channels if isinstance(c, nextcord.VoiceChannel)]
 
+        # Boucle du shuffle
         async def shuffle_loop():
-            while True:
-                try:
+            try:
+                while True:
                     target = random.choice(vcs)
                     await member.move_to(target)
                     await asyncio.sleep(0.1)
-                except:
-                    break
+            except asyncio.CancelledError:
+                return
+            except:
+                return
 
+        # Lancement du shuffle
         task = asyncio.create_task(shuffle_loop())
         shuffle_tasks[member.id] = task
 
@@ -246,14 +253,17 @@ class Voice(commands.Cog):
     @commands.command(name="shufflestop")
     @has_role()
     async def shufflestop(self, ctx):
+        # Aucun shuffle actif ?
         if not shuffle_tasks:
             return await ctx.send(embed=embed_msg("❌ Aucun shuffle", "Aucun shuffle n'est actif.", 0xff0000))
 
+        # Annulation propre
         for mid, task in list(shuffle_tasks.items()):
             task.cancel()
             del shuffle_tasks[mid]
 
         await ctx.send(embed=embed_msg("🛑 Shuffle arrêté", "Tous les shuffles ont été stoppés."))
+
     # ============================================================
     # ROTATE USERS (faire tourner plusieurs personnes dans les salons)
     # ============================================================
