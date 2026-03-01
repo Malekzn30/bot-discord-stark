@@ -2,25 +2,55 @@ import nextcord
 from nextcord.ext import commands
 from datetime import timedelta
 import sqlite3
-import asyncio
+import os
+import json
 
 from cogs.logs import send_log   # ← AJOUT OBLIGATOIRE
+
+# ----- gestion des permissions de commandes -----
+COMMAND_ROLES_PATH = os.path.join(os.path.dirname(__file__), "command_roles.json")
+
+def load_command_roles():
+    if not os.path.exists(COMMAND_ROLES_PATH):
+        with open(COMMAND_ROLES_PATH, "w") as f:
+            json.dump({}, f, indent=4)
+        return {}
+    try:
+        with open(COMMAND_ROLES_PATH, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_command_roles(cfg):
+    try:
+        with open(COMMAND_ROLES_PATH, "w") as f:
+            json.dump(cfg, f, indent=4)
+    except Exception as e:
+        print(f"❌ Erreur save_command_roles: {e}")
+
+COMMAND_ROLES = load_command_roles()
+
+async def role_permission_check(ctx):
+    # les admins peuvent tout faire
+    if ctx.author.guild_permissions.administrator:
+        return True
+    allowed = COMMAND_ROLES.get(ctx.command.name)
+    # si la commande n'est pas configurée, on laisse passer
+    if allowed is None or allowed == []:
+        return True
+    return any(r.id in allowed for r in ctx.author.roles)
 
 class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-        # Base SQLite persistante
-        self.db = sqlite3.connect("warns.db")
+        self.db = sqlite3.connect("warns.sqlite")
         self.cursor = self.db.cursor()
-
         self.cursor.execute("""
-        CREATE TABLE IF NOT EXISTS warns (
-            user_id INTEGER,
-            reason TEXT
-        )
+            CREATE TABLE IF NOT EXISTS warns (
+                user_id INTEGER,
+                reason TEXT
+            )
         """)
-
         self.db.commit()
 
     # ============================================================
@@ -217,23 +247,37 @@ class Moderation(commands.Cog):
     # WARNS (SQLite)
     # ============================================================
     @commands.command(name="warn")
+    @commands.has_permissions(kick_members=True)
     async def warn(self, ctx, member: nextcord.Member = None, *, reason="Aucune raison"):
         if not member:
             await ctx.send("❌ Veuillez mentionner un membre.")
             return
-        
+
         if member == ctx.author:
             await ctx.send("❌ Vous ne pouvez pas vous warn vous-même.")
             return
-        
+
         self.cursor.execute("INSERT INTO warns (user_id, reason) VALUES (?, ?)", (member.id, reason))
         self.db.commit()
-        
-        warn_count = self.cursor.execute("SELECT COUNT(*) FROM warns WHERE user_id = ?", (member.id,)).fetchone()[0]
-        
-        await ctx.send(f"⚠️ {member.mention} a reçu un **warn**.\n📄 Raison : {reason}\n📊 Total : {warn_count}")
-        
-        # 🔥 LOG AUTOMATIQUE
+
+        warn_count = self.cursor.execute(
+            "SELECT COUNT(*) FROM warns WHERE user_id = ?", (member.id,)
+        ).fetchone()[0]
+
+        await ctx.send(
+            f"⚠️ {member.mention} a reçu un **warn**.\n"
+            f"📄 Raison : {reason}\n📊 Total : {warn_count}"
+        )
+
+        # attribution du rôle de warn
+        role = ctx.guild.get_role(1477499178363129867)
+        if role:
+            try:
+                await member.add_roles(role, reason="Warn automatique")
+            except Exception:
+                pass  # on ignore si ça échoue
+
+        # envoi du log
         await send_log(
             self.bot,
             "warn",
@@ -331,3 +375,4 @@ class Moderation(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Moderation(bot))
+    bot.check(role_permission_check)
