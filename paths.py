@@ -23,8 +23,8 @@ VOICE_GUIDE_PATH = os.path.join(GUIDES_DIR, "VOICE_GUIDE.md")
 for directory in [DATA_DIR, GUIDES_DIR, DOCS_DIR, UTILS_DIR]:
     os.makedirs(directory, exist_ok=True)
 
-print("✅ Configuration des chemins chargée")
-print(f"📁 Dossier data : {DATA_DIR}")
-print(f"📁 Dossier guides : {GUIDES_DIR}")
-print(f"📁 Dossier docs : {DOCS_DIR}")
-print(f"📁 Dossier cogs : {COGS_DIR}")
+print("Configuration des chemins chargee")
+print(f"Dossier data : {DATA_DIR}")
+print(f"Dossier guides : {GUIDES_DIR}")
+print(f"Dossier docs : {DOCS_DIR}")
+print(f"Dossier cogs : {COGS_DIR}")

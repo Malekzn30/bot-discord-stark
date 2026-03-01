@@ -14,7 +14,8 @@ from config import TOKEN
 # Intents MINIMAUX pour économiser la RAM
 intents = nextcord.Intents.default()
 intents.message_content = True
-intents.members = False  # ← Désactiver cache de membres
+intents.members = True   # ← NÉCESSAIRE pour les tickets
+intents.guilds = True   # ← NÉCESSAIRE pour les tickets
 intents.presences = False  # ← Pas de presences
 intents.typing = False  # ← Pas de typing
 

@@ -5,7 +5,10 @@ import os
 import asyncio
 from datetime import datetime
 from typing import List, Dict, Any
-from nextcord import ui, Modal, TextInput
+from nextcord import ui
+from nextcord.ui import Modal, TextInput
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from paths import TICKETS_CONFIG_PATH, TICKETS_DATA_PATH, TICKETS_PANELS_PATH
 
 CONFIG_PATH = TICKETS_CONFIG_PATH
@@ -145,12 +148,12 @@ class TicketQuestionnaire(Modal):
     async def _create_ticket_with_responses(self, interaction: nextcord.Interaction, responses: Dict):
         """Créer le ticket avec les réponses du questionnaire"""
         category_data = self.category_data
-        guild = ctx.guild
+        guild = interaction.guild
         
         # Trouver la catégorie Discord
         discord_category = guild.get_channel(CONFIG.get("category"))
         if not discord_category:
-            return await ctx.send("❌ La catégorie de tickets n'est pas configurée.", ephemeral=True)
+            return await interaction.response.send_message("❌ La catégorie de tickets n'est pas configurée.", ephemeral=True)
         
         # Incrémenter le compteur
         CONFIG["counter"] = CONFIG.get("counter", 0) + 1
@@ -160,7 +163,7 @@ class TicketQuestionnaire(Modal):
         # Créer le canal avec permissions
         overwrites = {
             guild.default_role: nextcord.PermissionOverwrite(read_messages=False),
-            ctx.author: nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
+            interaction.user: nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
         
         # Ajouter permissions pour les rôles gestionnaires
@@ -173,7 +176,7 @@ class TicketQuestionnaire(Modal):
             name, 
             category=discord_category, 
             overwrites=overwrites,
-            topic=f"Ticket {category_data.get('name')} - {ctx.author}"
+            topic=f"Ticket {category_data.get('name')} - {interaction.user}"
         )
         
         # Créer l'embed d'ouverture avec les réponses
@@ -183,8 +186,8 @@ class TicketQuestionnaire(Modal):
             color=category_data.get("color", 0x3498db),
             timestamp=datetime.utcnow()
         )
-        embed.set_footer(text=f"Ticket #{CONFIG['counter']} • Créé par {ctx.author}")
-        embed.add_field(name="👤 Utilisateur", value=ctx.author.mention, inline=True)
+        embed.set_footer(text=f"Ticket #{CONFIG['counter']} • Créé par {interaction.user}")
+        embed.add_field(name="👤 Utilisateur", value=interaction.user.mention, inline=True)
         embed.add_field(name="📂 Catégorie", value=category_data.get("name", "Inconnue"), inline=True)
         
         # Ajouter les réponses du questionnaire
@@ -195,7 +198,7 @@ class TicketQuestionnaire(Modal):
                 embed.add_field(name=question["label"], value=response, inline=False)
         
         # Envoyer le message d'ouverture
-        await chan.send(f"{ctx.author.mention} {CONFIG.get('manager_roles', [])}", embed=embed)
+        await chan.send(f"{interaction.user.mention} {CONFIG.get('manager_roles', [])}", embed=embed)
         
         # Ajouter la vue d'actions
         view = TicketActionView(self.bot)
@@ -205,13 +208,13 @@ class TicketQuestionnaire(Modal):
         thread_id = await self.bot.get_cog("Tickets")._create_log_thread(chan)
         TICKET_DATA[str(chan.id)] = {
             "thread_id": thread_id, 
-            "owner": ctx.author.id,
+            "owner": interaction.user.id,
             "category": self.category_key,
             "responses": responses
         }
         save_data(TICKET_DATA)
         
-        await ctx.send(f"✅ Ticket créé : {chan.mention}", ephemeral=True)
+        await interaction.response.send_message(f"✅ Ticket créé : {chan.mention}", ephemeral=True)
 
 
 class CategorySelectView(ui.View):
@@ -247,12 +250,11 @@ class CategorySelectView(ui.View):
 
     async def _create_simple_ticket(self, interaction: nextcord.Interaction, category_key: str, category_data: Dict):
         """Créer un ticket simple sans questionnaire"""
-        # Logique similaire à TicketQuestionnaire mais sans les questions
-        guild = ctx.guild
+        guild = interaction.guild
         discord_category = guild.get_channel(CONFIG.get("category"))
         
         if not discord_category:
-            return await ctx.send("❌ La catégorie de tickets n'est pas configurée.", ephemeral=True)
+            return await interaction.response.send_message("❌ La catégorie de tickets n'est pas configurée.", ephemeral=True)
         
         CONFIG["counter"] = CONFIG.get("counter", 0) + 1
         save_config(CONFIG)
@@ -260,7 +262,7 @@ class CategorySelectView(ui.View):
         
         overwrites = {
             guild.default_role: nextcord.PermissionOverwrite(read_messages=False),
-            ctx.author: nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
+            interaction.user: nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
         
         for rid in CONFIG.get("manager_roles", []):
@@ -276,11 +278,11 @@ class CategorySelectView(ui.View):
             color=category_data.get("color", 0x3498db),
             timestamp=datetime.utcnow()
         )
-        embed.set_footer(text=f"Ticket #{CONFIG['counter']} • Créé par {ctx.author}")
-        embed.add_field(name="👤 Utilisateur", value=ctx.author.mention, inline=True)
+        embed.set_footer(text=f"Ticket #{CONFIG['counter']} • Créé par {interaction.user}")
+        embed.add_field(name="👤 Utilisateur", value=interaction.user.mention, inline=True)
         embed.add_field(name="📂 Catégorie", value=category_data.get("name", "Inconnue"), inline=True)
         
-        await chan.send(f"{ctx.author.mention}", embed=embed)
+        await chan.send(f"{interaction.user.mention}", embed=embed)
         
         view = TicketActionView(self.bot)
         await chan.send("🛠️ **Actions du ticket** :", view=view)
@@ -288,12 +290,12 @@ class CategorySelectView(ui.View):
         thread_id = await self.bot.get_cog("Tickets")._create_log_thread(chan)
         TICKET_DATA[str(chan.id)] = {
             "thread_id": thread_id, 
-            "owner": ctx.author.id,
+            "owner": interaction.user.id,
             "category": category_key
         }
         save_data(TICKET_DATA)
         
-        await ctx.send(f"✅ Ticket créé : {chan.mention}", ephemeral=True)
+        await interaction.response.send_message(f"✅ Ticket créé : {chan.mention}", ephemeral=True)
 
 
 class PanelEditView(ui.View):
