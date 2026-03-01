@@ -1,0 +1,114 @@
+# 🚫 Fichiers à ignorer pour Git
+
+# ============= PYTHON =============
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ============= ENVIRONNEMENT =============
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ============= DONNÉES DU BOT =============
+data/*.json
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+
+# ============= LOGS =============
+*.log
+logs/
+*.out
+
+# ============= IDE =============
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ============= SYSTÈME =============
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ============= TEMPORAIRE =============
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+
+# ============= SÉCURITÉ =============
+config_secret.py
+secrets.txt
+token.txt
+
+# ============= RENDER =============
+.render.yaml
+
+# ============= NODE (si besoin) =============
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============= COVERAGE =============
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# ============= DOCUMENTATION =============
+docs/_build/
+
+# ============= PERSONNEL =============
+personal/
+private/
+local/
+
+# ============= BACKUPS =============
+backups/
+*.backup
+*.bak
+
+# ============= CACHE =============
+.cache/
+*.cache
+
+# ============= CONFIGURATION SPÉCIFIQUE =============
+# Garder les exemples mais ignorer les vraies configs
+config_example.py
+!config.py
+data_example/
+!data/

@@ -1,15 +1,16 @@
 import nextcord
 from nextcord.ext import commands
-from datetime import datetime
-import os
 import json
+import os
 import asyncio
+from datetime import datetime
 from typing import List, Dict, Any
 from nextcord import ui, Modal, TextInput
+from paths import TICKETS_CONFIG_PATH, TICKETS_DATA_PATH, TICKETS_PANELS_PATH
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "tickets_config.json")
-DATA_PATH = os.path.join(os.path.dirname(__file__), "tickets_data.json")
-PANELS_PATH = os.path.join(os.path.dirname(__file__), "tickets_panels.json")
+CONFIG_PATH = TICKETS_CONFIG_PATH
+DATA_PATH = TICKETS_DATA_PATH
+PANELS_PATH = TICKETS_PANELS_PATH
 
 def load_config():
     if not os.path.exists(CONFIG_PATH):
