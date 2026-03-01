@@ -3,6 +3,10 @@ from nextcord.ext import commands
 from nextcord import ui
 from config import AUTHORIZED_ROLE_ID
 
+# ============================================================
+# PERMISSION CHECK
+# ============================================================
+
 def has_role():
     async def predicate(ctx):
         role = ctx.guild.get_role(AUTHORIZED_ROLE_ID)
@@ -29,7 +33,6 @@ class PageView(ui.View):
         self.index = (self.index + 1) % len(self.pages)
         await interaction.response.edit_message(embed=self.pages[self.index], view=self)
 
-
 # ============================================================
 # MENU DÉROULANT
 # ============================================================
@@ -41,7 +44,6 @@ class CategorySelect(ui.Select):
         options = [
             nextcord.SelectOption(label="🎙️ Vocal", description="Commandes vocales"),
             nextcord.SelectOption(label="🛡️ Modération", description="Commandes de modération"),
-            nextcord.SelectOption(label="🎮 Jeux", description="Commandes de jeux"),
             nextcord.SelectOption(label="📊 Système", description="Commandes système"),
         ]
 
@@ -55,22 +57,25 @@ class CategorySelect(ui.Select):
     async def callback(self, interaction: nextcord.Interaction):
         category = self.values[0]
 
-        # ============================
-        # LISTES DE COMMANDES + DESCRIPTIONS
-        # ============================
+        # ============================================================
+        # LISTE DES COMMANDES PAR CATÉGORIE
+        # ============================================================
 
         commands_dict = {
+
+            # ====================================================
+            # VOCAL
+            # ====================================================
             "🎙️ Vocal": {
+
                 # Déplacements
-                "moove": "Déplace un utilisateur vers un autre salon vocal.",
-                "move": "Alias de moove.",
-                "mooveusers": "Déplace plusieurs utilisateurs sélectionnés.",
-                "mooverandom": "Déplace un utilisateur aléatoirement.",
-                "mooverandomusers": "Déplace plusieurs utilisateurs aléatoires.",
-                "mooveall": "Déplace tous les utilisateurs du salon.",
-                "mooveallrandom": "Déplace tous les utilisateurs aléatoirement.",
+                "moove": "Déplace un utilisateur vers un salon vocal.",
+                "mooveusers": "Déplace plusieurs utilisateurs vers un salon.",
+                "mooverandom": "Déplace un utilisateur dans un salon aléatoire.",
+                "mooverandomusers": "Déplace plusieurs utilisateurs aléatoirement.",
+                "mooveall": "Déplace toute ta vocal vers un salon.",
+                "mooveallrandom": "Déplace toute ta vocal aléatoirement.",
                 "mooveserver": "Déplace tout le serveur vers un salon.",
-                "mooveeveryone": "Déplace tout le serveur vers un salon.",
                 "back": "Ramène les utilisateurs à leur salon précédent.",
 
                 # Shuffle
@@ -78,22 +83,20 @@ class CategorySelect(ui.Select):
                 "shufflestop": "Arrête le shuffle vocal.",
 
                 # Rotation
-                "rotateusers": "Fait tourner les utilisateurs entre les salons.",
-                "rotateall": "Fait tourner tout le monde.",
+                "rotateusers": "Fait tourner des utilisateurs entre les salons.",
+                "rotateall": "Fait tourner toute la vocal.",
                 "rotaterandom": "Rotation aléatoire.",
-                "rotationrandom": "Rotation aléatoire.",
                 "rotategroups": "Rotation par groupes.",
-                "rotationgroups": "Rotation par groupes.",
 
                 # Random teams / split / assign
-                "randompair": "Crée des paires aléatoires.",
+                "randompair": "Crée des duos aléatoires.",
                 "randomteams": "Crée des équipes aléatoires.",
                 "randomsplit": "Sépare en deux groupes.",
-                "randomassign": "Assigne aléatoirement des utilisateurs.",
+                "randomassign": "Assigne chaque membre à un salon aléatoire.",
 
                 # Gestion vocale
                 "clearvoice": "Vide un salon vocal.",
-                "clearcategory": "Vide toute une catégorie vocale.",
+                "clearcategory": "Vide une catégorie vocale.",
                 "lockvoice": "Verrouille un salon vocal.",
                 "unlockvoice": "Déverrouille un salon vocal.",
                 "muteall": "Mute tout le monde.",
@@ -103,28 +106,28 @@ class CategorySelect(ui.Select):
 
                 # Fun / troll
                 "spin": "Fait tourner un utilisateur.",
-                "spinall": "Fait tourner tout le monde.",
-                "randomtp": "Téléporte un utilisateur aléatoire.",
-                "russianroulette": "Kick vocal aléatoire.",
+                "spinall": "Fait tourner toute la vocal.",
+                "randomtp": "Téléporte un utilisateur aléatoirement.",
+                "russianroulette": "Choisit un perdant aléatoire.",
                 "randomkickvoice": "Kick vocal aléatoire.",
 
                 # Auto
                 "autobalance": "Équilibre automatiquement les salons.",
-                "autoregroup": "Regroupe automatiquement.",
-                "autosplit": "Sépare automatiquement.",
-                "autosort": "Trie automatiquement.",
+                "autoregroup": "Regroupe tout le monde dans un salon.",
+                "autosplit": "Sépare automatiquement en X salons.",
+                "autosort": "Trie les membres par rôle.",
 
                 # Nuke
-                "nukevoice": "Nuke un salon vocal.",
-                "nukecategory": "Nuke une catégorie.",
-                "nukerandom": "Nuke aléatoire.",
-                "nukeshuffle": "Nuke + shuffle.",
+                "nukevoice": "Vide un salon vocal.",
+                "nukecategory": "Vide une catégorie vocale.",
+                "nukerandom": "Déplace tout le monde aléatoirement.",
+                "nukeshuffle": "Shuffle massif.",
 
                 # Stats / logs / utils
                 "voicestats": "Affiche les statistiques vocales.",
-                "movelog": "Affiche les logs de déplacement.",
+                "movelog": "Historique des déplacements.",
                 "whoisvoice": "Montre où se trouve un utilisateur.",
-                "listvoice": "Liste les utilisateurs en vocal.",
+                "listvoice": "Liste les salons vocaux et leurs membres.",
 
                 # Bot actions
                 "joinme": "Fait rejoindre le bot ton salon.",
@@ -132,27 +135,66 @@ class CategorySelect(ui.Select):
                 "leave": "Fait quitter le bot."
             },
 
+            # ====================================================
+            # MODÉRATION
+            # ====================================================
             "🛡️ Modération": {
-                "lockchannel": "Verrouille un salon texte.",
-                "unlockchannel": "Déverrouille un salon texte.",
-                "say": "Fait parler le bot."
+
+                # Actions
+                "kick": "Expulse un membre.",
+                "ban": "Bannit un membre.",
+                "unban": "Débannit un utilisateur.",
+                "tempban": "Ban temporaire.",
+                "softban": "Ban + unban (supprime messages).",
+                "masskick": "Kick plusieurs membres.",
+                "massban": "Ban plusieurs membres.",
+
+                # Mute / timeout
+                "mute": "Mute un membre.",
+                "unmute": "Unmute un membre.",
+                "timeout": "Timeout un membre.",
+                "untimeout": "Retire le timeout.",
+
+                # Warns (SQLite)
+                "warn": "Ajoute un avertissement.",
+                "warnlist": "Liste les avertissements.",
+                "unwarn": "Retire un avertissement.",
+                "clearwarns": "Supprime tous les avertissements.",
+
+                # Gestion salon
+                "lock": "Verrouille le salon.",
+                "unlock": "Déverrouille le salon.",
+                "slowmode": "Active un slowmode.",
+
+                # Messages
+                "clear": "Supprime des messages.",
+                "clearuser": "Supprime les messages d’un membre.",
+                "clearbots": "Supprime les messages des bots.",
+                "clearembeds": "Supprime les embeds.",
+
+                # Infos
+                "userinfo": "Infos sur un membre.",
+                "serverinfo": "Infos sur le serveur.",
+
+                # Nicknames
+                "setnick": "Change le pseudo d’un membre.",
+                "resetnick": "Réinitialise le pseudo."
             },
 
-            "🎮 Jeux": {
-                "devinelenombre": "Jeu : devine le nombre."
-            },
-
+            # ====================================================
+            # SYSTÈME
+            # ====================================================
             "📊 Système": {
+                "help": "Affiche ce menu d’aide.",
                 "stat": "Affiche les statistiques du bot."
             }
         }
 
+        # ============================================================
+        # CRÉATION DES PAGES
+        # ============================================================
+
         cmds = list(commands_dict[category].items())
-
-        # ============================
-        # PAGINATION AUTOMATIQUE
-        # ============================
-
         pages = []
         per_page = 10
 
@@ -172,21 +214,19 @@ class CategorySelect(ui.Select):
 
             pages.append(embed)
 
-        # ============================
-        # ENVOI AVEC PAGINATION
-        # ============================
-
         await interaction.response.edit_message(
             embed=pages[0],
             view=PageView(pages)
         )
 
+# ============================================================
+# HELP VIEW
+# ============================================================
 
 class HelpView(ui.View):
     def __init__(self, bot):
         super().__init__(timeout=None)
         self.add_item(CategorySelect(bot))
-
 
 # ============================================================
 # COG SYSTEM
@@ -216,7 +256,6 @@ class System(commands.Cog):
         embed.add_field(name="Uptime", value=f"{uptime} sec")
         embed.add_field(name="Ping", value=f"{round(self.bot.latency * 1000)} ms")
         await ctx.send(embed=embed)
-
 
 def setup(bot):
     bot.add_cog(System(bot))
