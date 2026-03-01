@@ -4,6 +4,7 @@ import threading
 from flask import Flask
 import os
 import time
+import requests
 from config import TOKEN
 
 # ============================
@@ -18,8 +19,8 @@ intents.presences = False  # ← Pas de presences
 intents.typing = False  # ← Pas de typing
 
 bot = commands.Bot(
-    command_prefix="+", 
-    intents=intents, 
+    command_prefix="+",
+    intents=intents,
     help_command=None,
     chunk_guilds_at_startup=False  # ← Pas de chunking au startup
 )
@@ -29,7 +30,6 @@ bot.start_time = time.time()
 async def on_ready():
     print(f"Bot prêt : {bot.user}")
     cleanup_aggressive.start()
-    # aucune commande slash n'est utilisée ; tout est en préfixe +
 
 @tasks.loop(minutes=10)
 async def cleanup_aggressive():
@@ -37,7 +37,7 @@ async def cleanup_aggressive():
     try:
         from cogs.games import cleanup_games
         cleanup_games()
-        
+
         # Forcer garbage collection
         import gc
         gc.collect()
@@ -68,12 +68,27 @@ def run_flask():
     app.run(host="0.0.0.0", port=10000)
 
 # ============================
+# KEEP-ALIVE (ANTI-SLEEP RENDER)
+# ============================
+
+def keep_alive():
+    while True:
+        try:
+            requests.get("https://bot-discord-stark.onrender.com")
+        except:
+            pass
+        time.sleep(300)  # 5 minutes
+
+# ============================
 # LANCEMENT
 # ============================
 
 if __name__ == "__main__":
     # Lancer Flask dans un thread secondaire
     threading.Thread(target=run_flask).start()
+
+    # Lancer le keep-alive dans un autre thread
+    threading.Thread(target=keep_alive).start()
 
     # Lancer le bot Discord dans le thread principal
     load_cogs()
