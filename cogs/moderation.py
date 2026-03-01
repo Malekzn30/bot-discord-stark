@@ -51,9 +51,12 @@ class Moderation(commands.Cog):
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS warns (
                 user_id INTEGER,
-                reason TEXT
+                reason TEXT,
+                moderator_id INTEGER
             )
         """)
+        # Ajouter la colonne moderator_id si elle n'existe pas (pour compatibilité)
+        self.cursor.execute("ALTER TABLE warns ADD COLUMN moderator_id INTEGER DEFAULT NULL")
         # Créer un index sur user_id pour les requêtes rapides
         self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_id ON warns(user_id)")
         self.db.commit()
@@ -255,24 +258,43 @@ class Moderation(commands.Cog):
     @commands.has_permissions(kick_members=True)
     async def warn(self, ctx, member: nextcord.Member = None, *, reason="Aucune raison"):
         if not member:
-            await ctx.send("❌ Veuillez mentionner un membre.")
+            embed = nextcord.Embed(
+                title="❌ Erreur de Warn",
+                description="Veuillez mentionner un membre.",
+                color=0xff6b6b
+            )
+            await ctx.send(embed=embed)
             return
 
         if member == ctx.author:
-            await ctx.send("❌ Vous ne pouvez pas vous warn vous-même.")
+            embed = nextcord.Embed(
+                title="❌ Erreur de Warn",
+                description="Vous ne pouvez pas vous warn vous-même.",
+                color=0xff6b6b
+            )
+            await ctx.send(embed=embed)
             return
 
-        self.cursor.execute("INSERT INTO warns (user_id, reason) VALUES (?, ?)", (member.id, reason))
+        self.cursor.execute("INSERT INTO warns (user_id, reason, moderator_id) VALUES (?, ?, ?)", (member.id, reason, ctx.author.id))
         self.db.commit()
 
         warn_count = self.cursor.execute(
             "SELECT COUNT(*) FROM warns WHERE user_id = ?", (member.id,)
         ).fetchone()[0]
 
-        await ctx.send(
-            f"⚠️ {member.mention} a reçu un **warn**.\n"
-            f"📄 Raison : {reason}\n📊 Total : {warn_count}"
+        embed = nextcord.Embed(
+            title="⚠️ Avertissement émis",
+            color=0xff6b6b,
+            timestamp=ctx.message.created_at
         )
+        embed.add_field(name="👤 Membre averti", value=member.mention, inline=False)
+        embed.add_field(name="📄 Raison", value=reason, inline=False)
+        embed.add_field(name="� Modérateur", value=ctx.author.mention, inline=False)
+        embed.add_field(name="📊 Total de warns", value=f"**{warn_count}** avertissement{'s' if warn_count > 1 else ''}", inline=False)
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_footer(text=f"Warn émis par {ctx.author.name}", icon_url=ctx.author.display_avatar.url)
+        
+        await ctx.send(embed=embed)
 
         # attribution du rôle de warn
         role = ctx.guild.get_role(1477499178363129867)
@@ -298,45 +320,176 @@ class Moderation(commands.Cog):
     @commands.command(name="warnlist")
     async def warnlist(self, ctx, member: nextcord.Member = None):
         if not member:
-            return await ctx.send("❌ Utilise : `+warnlist @membre`")
+            embed = nextcord.Embed(
+                title="❌ Erreur",
+                description="Utilise : `+warnlist @membre`",
+                color=0xff6b6b
+            )
+            await ctx.send(embed=embed)
+            return
 
-        self.cursor.execute("SELECT reason FROM warns WHERE user_id = ?", (member.id,))
+        self.cursor.execute("SELECT reason, moderator_id FROM warns WHERE user_id = ?", (member.id,))
         rows = self.cursor.fetchall()
 
         if not rows:
-            return await ctx.send("✔️ Aucun avertissement.")
+            embed = nextcord.Embed(
+                title="✅ Aucun avertissement",
+                description=f"{member.mention} n'a aucun avertissement enregistré.",
+                color=0x2ecc71
+            )
+            embed.set_thumbnail(url=member.display_avatar.url)
+            await ctx.send(embed=embed)
+            return
 
-        desc = "\n".join([f"{i+1}. {r[0]}" for i, r in enumerate(rows)])
-        await ctx.send(f"⚠️ Warns de {member.mention} :\n{desc}")
+        embed = nextcord.Embed(
+            title=f"⚠️ Liste des avertissements - {member.display_name}",
+            color=0xff6b6b,
+            timestamp=ctx.message.created_at
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        
+        for i, (reason, moderator_id) in enumerate(rows, 1):
+            moderator = ctx.guild.get_member(moderator_id) if moderator_id else None
+            moderator_name = moderator.display_name if moderator else "Modérateur inconnu"
+            
+            embed.add_field(
+                name=f"Warn #{i}",
+                value=f"📄 **Raison** : {reason}\n👮 **Par** : {moderator_name}",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Total : {len(rows)} avertissement{'s' if len(rows) > 1 else ''}")
+        await ctx.send(embed=embed)
 
     @commands.command(name="unwarn")
     async def unwarn(self, ctx, member: nextcord.Member = None, index: int = None):
         if not member or index is None:
-            return await ctx.send("❌ Utilise : `+unwarn @membre <index>`")
+            embed = nextcord.Embed(
+                title="❌ Erreur",
+                description="Utilise : `+unwarn @membre <index>`",
+                color=0xff6b6b
+            )
+            await ctx.send(embed=embed)
+            return
 
         self.cursor.execute("SELECT rowid, reason FROM warns WHERE user_id = ?", (member.id,))
         rows = self.cursor.fetchall()
 
         if index < 1 or index > len(rows):
-            return await ctx.send("❌ Index invalide.")
+            embed = nextcord.Embed(
+                title="❌ Index invalide",
+                description=f"Index doit être entre 1 et {len(rows)}",
+                color=0xff6b6b
+            )
+            await ctx.send(embed=embed)
+            return
 
         rowid = rows[index - 1][0]
+        reason = rows[index - 1][1]
 
         self.cursor.execute("DELETE FROM warns WHERE rowid = ?", (rowid,))
         self.db.commit()
 
-        await ctx.send(f"🧹 Warn retiré : {rows[index - 1][1]}")
+        embed = nextcord.Embed(
+            title="🧹 Avertissement retiré",
+            color=0x2ecc71,
+            timestamp=ctx.message.created_at
+        )
+        embed.add_field(name="👤 Membre", value=member.mention, inline=False)
+        embed.add_field(name="📄 Raison du warn retiré", value=reason, inline=False)
+        embed.add_field(name="👮 Retiré par", value=ctx.author.mention, inline=False)
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_footer(text=f"Retiré par {ctx.author.name}", icon_url=ctx.author.display_avatar.url)
+        
+        await ctx.send(embed=embed)
 
     @commands.command(name="clearwarns")
     async def clearwarns(self, ctx, member: nextcord.Member = None):
         if not member:
-            return await ctx.send("❌ Utilise : `+clearwarns @membre`")
+            embed = nextcord.Embed(
+                title="❌ Erreur",
+                description="Utilise : `+clearwarns @membre`",
+                color=0xff6b6b
+            )
+            await ctx.send(embed=embed)
+            return
+
+        # Compter le nombre de warns avant suppression
+        self.cursor.execute("SELECT COUNT(*) FROM warns WHERE user_id = ?", (member.id,))
+        warn_count = self.cursor.fetchone()[0]
 
         self.cursor.execute("DELETE FROM warns WHERE user_id = ?", (member.id,))
         self.db.commit()
 
-        await ctx.send(f"🧼 Tous les warns de {member.mention} ont été supprimés.")
+        embed = nextcord.Embed(
+            title="🧼 Tous les warns supprimés",
+            color=0x2ecc71,
+            timestamp=ctx.message.created_at
+        )
+        embed.add_field(name="👤 Membre", value=member.mention, inline=False)
+        embed.add_field(name="📊 Nombre supprimé", value=f"**{warn_count}** avertissement{'s' if warn_count > 1 else ''}", inline=False)
+        embed.add_field(name="👮 Supprimé par", value=ctx.author.mention, inline=False)
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_footer(text=f"Supprimé par {ctx.author.name}", icon_url=ctx.author.display_avatar.url)
+        
+        await ctx.send(embed=embed)
 
+    @commands.command(name="warn_leaderboard", aliases=["warnlb", "warnrank"])
+    async def warn_leaderboard(self, ctx, limit: int = 10):
+        """Affiche le classement des membres avec le plus d'avertissements"""
+        # Récupérer tous les warns groupés par utilisateur
+        self.cursor.execute("""
+            SELECT user_id, COUNT(*) as warn_count 
+            FROM warns 
+            GROUP BY user_id 
+            ORDER BY warn_count DESC 
+            LIMIT ?
+        """, (limit,))
+        
+        rows = self.cursor.fetchall()
+        
+        if not rows:
+            return await ctx.send("✅ Aucun avertissement enregistré !")
+        
+        # Créer l'embed du leaderboard
+        embed = nextcord.Embed(
+            title="⚠️ Classement des Avertissements",
+            description=f"Top {len(rows)} membres avec le plus de warns",
+            color=0xff6b6b
+        )
+        
+        # Ajouter chaque membre au classement
+        for i, (user_id, warn_count) in enumerate(rows, 1):
+            member = ctx.guild.get_member(user_id)
+            if member:
+                # Ajouter une médaille pour les 3 premiers
+                medal = ""
+                if i == 1:
+                    medal = "🥇"
+                elif i == 2:
+                    medal = "🥈"
+                elif i == 3:
+                    medal = "🥉"
+                else:
+                    medal = f"#{i}"
+                
+                embed.add_field(
+                    name=f"{medal} {member.display_name}",
+                    value=f"**{warn_count}** avertissement{'s' if warn_count > 1 else ''}",
+                    inline=False
+                )
+            else:
+                # Si le membre n'est plus sur le serveur
+                embed.add_field(
+                    name=f"#{i} Utilisateur inconnu",
+                    value=f"**{warn_count}** avertissement{'s' if warn_count > 1 else ''}",
+                    inline=False
+                )
+        
+        embed.set_footer(text=f"Total: {sum(row[1] for row in rows)} warns enregistrés")
+        embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
+        
+        await ctx.send(embed=embed)
 
     # ============================================================
     # LOCK / UNLOCK
@@ -383,10 +536,29 @@ class Moderation(commands.Cog):
     @commands.command(name="warn_check")
     async def warn_check(self, ctx, member: nextcord.Member = None):
         if not member:
-            return await ctx.send("❌ Utilise : `+warn_check @membre`")
+            embed = nextcord.Embed(
+                title="❌ Erreur",
+                description="Utilise : `+warn_check @membre`",
+                color=0xff6b6b
+            )
+            await ctx.send(embed=embed)
+            return
+            
         self.cursor.execute("SELECT COUNT(*) FROM warns WHERE user_id = ?", (member.id,))
         count = self.cursor.fetchone()[0]
-        await ctx.send(f"⚠️ {member.mention} a **{count}** avertissements.")
+        
+        embed = nextcord.Embed(
+            title="⚠️ Vérification des avertissements",
+            color=0xff6b6b if count > 0 else 0x2ecc71,
+            timestamp=ctx.message.created_at
+        )
+        embed.add_field(name="👤 Membre vérifié", value=member.mention, inline=False)
+        embed.add_field(name="📊 Nombre de warns", value=f"**{count}** avertissement{'s' if count > 1 else ''}", inline=False)
+        embed.add_field(name="📈 Statut", value="⚠️ Membre averti" if count > 0 else "✅ Membre clean", inline=False)
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_footer(text=f"Vérifié par {ctx.author.name}", icon_url=ctx.author.display_avatar.url)
+        
+        await ctx.send(embed=embed)
 
     @commands.command(name="bulkdelete")
     async def bulkdelete(self, ctx, limit: int = 50):

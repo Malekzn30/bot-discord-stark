@@ -53,6 +53,7 @@
 - `+ban @user` - Bannir un membre
 - `+mute @user` - Rendre muet
 - `+warn @user "raison"` - Avertir
+- `+warn_leaderboard` - Classement des avertissements
 
 ### Système
 - `+botinfo` - Informations du bot
