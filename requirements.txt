@@ -2,3 +2,4 @@ nextcord
 PyNaCl
 flask
 requests
+python-dotenv
