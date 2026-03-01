@@ -1,8 +1,8 @@
 import nextcord
 from nextcord.ext import commands
 from datetime import datetime, timedelta
-import json
 import os
+import json
 import asyncio
 
 # ============================================================
@@ -30,33 +30,27 @@ DEFAULT_LOG_CHANNELS = {cat: None for cat in LOG_CATEGORIES}
 
 def load_config():
     if not os.path.exists(CONFIG_PATH):
-        save_config(DEFAULT_LOG_CHANNELS)
-        return DEFAULT_LOG_CHANNELS.copy()
+        with open(CONFIG_PATH, "w") as f:
+            json.dump(DEFAULT_LOG_CHANNELS, f, indent=4)
+        return DEFAULT_LOG_CHANNELS
 
     try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        # S'assurer que toutes les catégories existent
-        for cat in LOG_CATEGORIES:
-            if cat not in data:
-                data[cat] = None
-
-        return data
-
-    except Exception:
-        return DEFAULT_LOG_CHANNELS.copy()
+        with open(CONFIG_PATH, "r") as f:
+            config = json.load(f)
+        return config
+    except Exception as e:
+        print(f"❌ Erreur load_config: {e}")
+        return DEFAULT_LOG_CHANNELS
 
 def save_config(config):
     try:
-        tmp = CONFIG_PATH + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
-        os.replace(tmp, CONFIG_PATH)
-    except Exception:
-        pass
+        with open(CONFIG_PATH, "w") as f:
+            json.dump(config, f, indent=4)
+    except Exception as e:
+        print(f"❌ Erreur save_config: {e}")
 
 LOG_CHANNELS = load_config()
+
 # ============================================================
 # FONCTION DE LOG ULTRA DÉTAILLÉE (NIVEAU PREMIUM)
 # ============================================================
@@ -99,10 +93,12 @@ async def send_log(bot, category: str, title: str, fields: dict, ctx=None, audit
 
     channel_id = LOG_CHANNELS.get(category)
     if not channel_id:
+        print(f"⚠️ Aucun canal configuré pour la catégorie '{category}'")
         return
 
     channel = bot.get_channel(channel_id)
     if not channel:
+        print(f"❌ Canal {channel_id} introuvable pour '{category}'")
         return
 
     icon = CATEGORY_ICONS.get(category, "📄")
@@ -116,15 +112,19 @@ async def send_log(bot, category: str, title: str, fields: dict, ctx=None, audit
 
     # Ajout des champs détaillés
     for name, value in fields.items():
-        embed.add_field(name=f"• {name}", value=value, inline=False)
+        embed.add_field(name=name, value=str(value), inline=False)
 
     # Ajout de l'Audit Log ID si disponible
     if audit_id:
-        embed.add_field(name="• Audit Log ID", value=str(audit_id), inline=False)
+        embed.add_field(name="🔍 Audit ID", value=str(audit_id), inline=False)
 
     embed.set_footer(text=f"Catégorie : {category}")
 
-    await channel.send(embed=embed)
+    try:
+        await channel.send(embed=embed)
+    except Exception as e:
+        print(f"❌ Erreur envoi log: {e}")
+
 # ============================================================
 # AUDIT LOG HELPER (RÉCUPÈRE L'AUTEUR RÉEL DE L'ACTION)
 # ============================================================
@@ -136,17 +136,17 @@ async def get_audit_entry(guild, action_type, target_id):
     target_id = ID de la cible
     """
 
-    # Délai pour laisser Discord mettre à jour l'audit log
     await asyncio.sleep(0.5)
 
     try:
         async for entry in guild.audit_logs(limit=5, action=action_type):
             if entry.target and entry.target.id == target_id:
                 return entry
-    except Exception:
-        return None
+    except Exception as e:
+        print(f"❌ Erreur get_audit_entry: {e}")
 
     return None
+
 # ============================================================
 # LOGS MODÉRATION — TIMEOUT / KICK / BAN / ROLES / NICKNAMES
 # ============================================================
@@ -155,218 +155,89 @@ class LogsModeration(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # ------------------------------------------------------------
     # TIMEOUT / UNTIMEOUT (détecté automatiquement)
-    # ------------------------------------------------------------
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
+        if before.timed_out == after.timed_out:
+            return
 
-        # TIMEOUT APPLIQUÉ
-        if before.communication_disabled_until != after.communication_disabled_until:
-
-            # Timeout appliqué
-            if after.communication_disabled_until is not None:
-                entry = await get_audit_entry(
-                    after.guild,
-                    nextcord.AuditLogAction.member_update,
-                    after.id
-                )
-
-                actor = entry.user if entry else "Inconnu"
-                reason = entry.reason if entry else "Non spécifiée"
-
-                await send_log(
-                    bot=self.bot,
-                    category="moderation",
-                    title="TIMEOUT APPLIQUÉ",
-                    fields={
-                        "Auteur": f"{actor} (ID: {actor.id})" if actor != "Inconnu" else "Inconnu",
-                        "Cible": f"{after} (ID: {after.id})",
-                        "Expire": str(after.communication_disabled_until),
-                        "Raison": reason
-                    },
-                    audit_id=entry.id if entry else None
-                )
-
-            # Timeout retiré
-            else:
-                entry = await get_audit_entry(
-                    after.guild,
-                    nextcord.AuditLogAction.member_update,
-                    after.id
-                )
-
-                actor = entry.user if entry else "Inconnu"
-                reason = entry.reason if entry else "Non spécifiée"
-
-                await send_log(
-                    bot=self.bot,
-                    category="moderation",
-                    title="TIMEOUT RETIRÉ",
-                    fields={
-                        "Auteur": f"{actor} (ID: {actor.id})" if actor != "Inconnu" else "Inconnu",
-                        "Cible": f"{after} (ID: {after.id})",
-                        "Raison": reason
-                    },
-                    audit_id=entry.id if entry else None
-                )
-
-        # ------------------------------------------------------------
-        # RÔLES AJOUTÉS / RETIRÉS
-        # ------------------------------------------------------------
-        if before.roles != after.roles:
-            before_set = set(before.roles)
-            after_set = set(after.roles)
-
-            added = after_set - before_set
-            removed = before_set - after_set
-
-            # Rôle ajouté
-            for role in added:
-                entry = await get_audit_entry(
-                    after.guild,
-                    nextcord.AuditLogAction.member_role_update,
-                    after.id
-                )
-
-                actor = entry.user if entry else "Inconnu"
-                reason = entry.reason if entry else "Non spécifiée"
-
-                await send_log(
-                    bot=self.bot,
-                    category="roles",
-                    title="RÔLE AJOUTÉ",
-                    fields={
-                        "Auteur": f"{actor} (ID: {actor.id})" if actor != "Inconnu" else "Inconnu",
-                        "Cible": f"{after} (ID: {after.id})",
-                        "Rôle ajouté": f"{role.name} (ID: {role.id})",
-                        "Raison": reason
-                    },
-                    audit_id=entry.id if entry else None
-                )
-
-            # Rôle retiré
-            for role in removed:
-                entry = await get_audit_entry(
-                    after.guild,
-                    nextcord.AuditLogAction.member_role_update,
-                    after.id
-                )
-
-                actor = entry.user if entry else "Inconnu"
-                reason = entry.reason if entry else "Non spécifiée"
-
-                await send_log(
-                    bot=self.bot,
-                    category="roles",
-                    title="RÔLE RETIRÉ",
-                    fields={
-                        "Auteur": f"{actor} (ID: {actor.id})" if actor != "Inconnu" else "Inconnu",
-                        "Cible": f"{after} (ID: {after.id})",
-                        "Rôle retiré": f"{role.name} (ID: {role.id})",
-                        "Raison": reason
-                    },
-                    audit_id=entry.id if entry else None
-                )
-
-        # ------------------------------------------------------------
-        # PSEUDO MODIFIÉ
-        # ------------------------------------------------------------
-        if before.nick != after.nick:
-            entry = await get_audit_entry(
-                after.guild,
-                nextcord.AuditLogAction.member_update,
-                after.id
-            )
-
-            actor = entry.user if entry else "Inconnu"
-            reason = entry.reason if entry else "Non spécifiée"
-
+        if after.timed_out:
+            # TIMEOUT APPLIQUÉ
+            entry = await get_audit_entry(after.guild, nextcord.AuditLogAction.member_update, after.id)
             await send_log(
-                bot=self.bot,
-                category="nicknames",
-                title="PSEUDO MODIFIÉ",
-                fields={
-                    "Auteur": f"{actor} (ID: {actor.id})" if actor != "Inconnu" else "Inconnu",
-                    "Cible": f"{after} (ID: {after.id})",
-                    "Avant": before.nick or "Aucun",
-                    "Après": after.nick or "Aucun",
-                    "Raison": reason
+                self.bot,
+                "moderation",
+                "TIMEOUT APPLIQUÉ",
+                {
+                    "Membre": f"{after} (ID: {after.id})",
+                    "Durée": str(after.timed_out_until - datetime.utcnow()) if after.timed_out_until else "Indéfini",
+                    "Modérateur": entry.user if entry else "Inconnu"
+                },
+                audit_id=entry.id if entry else None
+            )
+        else:
+            # TIMEOUT RETIRÉ
+            entry = await get_audit_entry(after.guild, nextcord.AuditLogAction.member_update, after.id)
+            await send_log(
+                self.bot,
+                "moderation",
+                "TIMEOUT RETIRÉ",
+                {
+                    "Membre": f"{after} (ID: {after.id})",
+                    "Modérateur": entry.user if entry else "Inconnu"
                 },
                 audit_id=entry.id if entry else None
             )
 
-    # ------------------------------------------------------------
     # KICK
-    # ------------------------------------------------------------
     @commands.Cog.listener()
     async def on_member_remove(self, member):
-        entry = await get_audit_entry(
-            member.guild,
-            nextcord.AuditLogAction.kick,
-            member.id
-        )
+        await asyncio.sleep(0.5)
+        entry = await get_audit_entry(member.guild, nextcord.AuditLogAction.kick, member.id)
+        if entry and entry.action == nextcord.AuditLogAction.kick:
+            await send_log(
+                self.bot,
+                "moderation",
+                "MEMBRE KICKÉ",
+                {
+                    "Membre": f"{member} (ID: {member.id})",
+                    "Modérateur": entry.user,
+                    "Raison": entry.reason or "Non spécifiée"
+                },
+                audit_id=entry.id
+            )
 
-        if not entry:
-            return
-
-        await send_log(
-            bot=self.bot,
-            category="moderation",
-            title="KICK",
-            fields={
-                "Auteur": f"{entry.user} (ID: {entry.user.id})",
-                "Cible": f"{member} (ID: {member.id})",
-                "Raison": entry.reason or "Non spécifiée"
-            },
-            audit_id=entry.id
-        )
-
-    # ------------------------------------------------------------
     # BAN
-    # ------------------------------------------------------------
     @commands.Cog.listener()
     async def on_member_ban(self, guild, user):
-        entry = await get_audit_entry(
-            guild,
-            nextcord.AuditLogAction.ban,
-            user.id
-        )
-
+        entry = await get_audit_entry(guild, nextcord.AuditLogAction.ban, user.id)
         await send_log(
-            bot=self.bot,
-            category="moderation",
-            title="BAN",
-            fields={
-                "Auteur": f"{entry.user} (ID: {entry.user.id})" if entry else "Inconnu",
-                "Cible": f"{user} (ID: {user.id})",
+            self.bot,
+            "moderation",
+            "MEMBRE BANNI",
+            {
+                "Utilisateur": f"{user} (ID: {user.id})",
+                "Modérateur": entry.user if entry else "Inconnu",
                 "Raison": entry.reason if entry else "Non spécifiée"
             },
             audit_id=entry.id if entry else None
         )
 
-    # ------------------------------------------------------------
     # UNBAN
-    # ------------------------------------------------------------
     @commands.Cog.listener()
     async def on_member_unban(self, guild, user):
-        entry = await get_audit_entry(
-            guild,
-            nextcord.AuditLogAction.unban,
-            user.id
-        )
-
+        entry = await get_audit_entry(guild, nextcord.AuditLogAction.unban, user.id)
         await send_log(
-            bot=self.bot,
-            category="moderation",
-            title="UNBAN",
-            fields={
-                "Auteur": f"{entry.user} (ID: {entry.user.id})" if entry else "Inconnu",
-                "Cible": f"{user} (ID: {user.id})",
-                "Raison": entry.reason if entry else "Non spécifiée"
+            self.bot,
+            "moderation",
+            "MEMBRE DÉBANNI",
+            {
+                "Utilisateur": f"{user} (ID: {user.id})",
+                "Modérateur": entry.user if entry else "Inconnu"
             },
             audit_id=entry.id if entry else None
         )
+
 # ============================================================
 # LOGS VOCAUX — MUTE / UNMUTE / MOVE / JOIN / LEAVE
 # ============================================================
@@ -377,113 +248,29 @@ class LogsVoice(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
+        if before.channel != after.channel:
+            if after.channel is None:
+                await send_log(
+                    self.bot,
+                    "voice",
+                    "MEMBRE A QUITTÉ LE VOCAL",
+                    {
+                        "Membre": f"{member} (ID: {member.id})",
+                        "Salon": before.channel.name if before.channel else "Inconnu",
+                        "Durée": "Voir logs Discord"
+                    }
+                )
+            else:
+                await send_log(
+                    self.bot,
+                    "voice",
+                    "MEMBRE A REJOINT LE VOCAL",
+                    {
+                        "Membre": f"{member} (ID: {member.id})",
+                        "Salon": after.channel.name
+                    }
+                )
 
-        guild = member.guild
-
-        # ------------------------------------------------------------
-        # JOIN VOCAL
-        # ------------------------------------------------------------
-        if before.channel is None and after.channel is not None:
-            await send_log(
-                bot=self.bot,
-                category="voice",
-                title="CONNEXION VOCALE",
-                fields={
-                    "Utilisateur": f"{member} (ID: {member.id})",
-                    "Salon": f"{after.channel.name} (ID: {after.channel.id})"
-                }
-            )
-
-        # ------------------------------------------------------------
-        # LEAVE VOCAL
-        # ------------------------------------------------------------
-        if before.channel is not None and after.channel is None:
-            await send_log(
-                bot=self.bot,
-                category="voice",
-                title="DÉCONNEXION VOCALE",
-                fields={
-                    "Utilisateur": f"{member} (ID: {member.id})",
-                    "Salon": f"{before.channel.name} (ID: {before.channel.id})"
-                }
-            )
-
-        # ------------------------------------------------------------
-        # MOVE VOCAL
-        # ------------------------------------------------------------
-        if before.channel != after.channel and before.channel and after.channel:
-            entry = await get_audit_entry(
-                guild,
-                nextcord.AuditLogAction.member_move,
-                member.id
-            )
-
-            actor = entry.user if entry else "Inconnu"
-
-            await send_log(
-                bot=self.bot,
-                category="voice",
-                title="DÉPLACEMENT VOCAL",
-                fields={
-                    "Auteur": f"{actor} (ID: {actor.id})" if actor != "Inconnu" else "Inconnu",
-                    "Cible": f"{member} (ID: {member.id})",
-                    "De": f"{before.channel.name} (ID: {before.channel.id})",
-                    "Vers": f"{after.channel.name} (ID: {after.channel.id})"
-                },
-                audit_id=entry.id if entry else None
-            )
-
-        # ------------------------------------------------------------
-        # MUTE / UNMUTE
-        # ------------------------------------------------------------
-        if before.mute != after.mute:
-            action = "MUTE" if after.mute else "UNMUTE"
-
-            entry = await get_audit_entry(
-                guild,
-                nextcord.AuditLogAction.member_update,
-                member.id
-            )
-
-            actor = entry.user if entry else "Inconnu"
-
-            await send_log(
-                bot=self.bot,
-                category="voice",
-                title=f"{action} VOCAL",
-                fields={
-                    "Auteur": f"{actor} (ID: {actor.id})" if actor != "Inconnu" else "Inconnu",
-                    "Cible": f"{member} (ID: {member.id})",
-                    "Salon": f"{after.channel.name} (ID: {after.channel.id})" if after.channel else "Aucun"
-                },
-                audit_id=entry.id if entry else None
-            )
-
-        # ------------------------------------------------------------
-        # DEAF / UNDEAF
-        # ------------------------------------------------------------
-        if before.deaf != after.deaf:
-            action = "DEAF" if after.deaf else "UNDEAF"
-
-            entry = await get_audit_entry(
-                guild,
-                nextcord.AuditLogAction.member_update,
-                member.id
-            )
-
-            actor = entry.user if entry else "Inconnu"
-
-            await send_log(
-                bot=self.bot,
-                category="voice",
-                title=f"{action} VOCAL",
-                fields={
-                    "Auteur": f"{actor} (ID: {actor.id})" if actor != "Inconnu" else "Inconnu",
-                    "Cible": f"{member} (ID: {member.id})",
-                    "Salon": f"{after.channel.name} (ID: {after.channel.id})" if after.channel else "Aucun"
-                },
-                audit_id=entry.id if entry else None
-            )
 # ============================================================
 # LOGS MESSAGES — DELETE / EDIT (ULTRA PREMIUM)
 # ============================================================
@@ -492,54 +279,42 @@ class LogsMessages(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # ------------------------------------------------------------
     # MESSAGE SUPPRIMÉ
-    # ------------------------------------------------------------
     @commands.Cog.listener()
     async def on_message_delete(self, message):
-
-        # Ignore les bots
         if message.author.bot:
             return
 
         await send_log(
-            bot=self.bot,
-            category="messages",
-            title="MESSAGE SUPPRIMÉ",
-            fields={
+            self.bot,
+            "messages",
+            "MESSAGE SUPPRIMÉ",
+            {
                 "Auteur": f"{message.author} (ID: {message.author.id})",
-                "Salon": f"{message.channel.name} (ID: {message.channel.id})",
-                "Contenu": message.content if message.content else "*Aucun contenu*",
-                "Message ID": message.id
+                "Salon": f"{message.channel.mention}",
+                "Contenu": message.content[:1024] or "(vide)",
+                "Lien": f"[Voir le message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})"
             }
         )
 
-    # ------------------------------------------------------------
     # MESSAGE ÉDITÉ
-    # ------------------------------------------------------------
     @commands.Cog.listener()
     async def on_message_edit(self, before, after):
-
-        # Ignore les bots
-        if before.author.bot:
-            return
-
-        # Ignore si aucun changement
-        if before.content == after.content:
+        if before.author.bot or before.content == after.content:
             return
 
         await send_log(
-            bot=self.bot,
-            category="messages",
-            title="MESSAGE ÉDITÉ",
-            fields={
+            self.bot,
+            "messages",
+            "MESSAGE ÉDITÉ",
+            {
                 "Auteur": f"{before.author} (ID: {before.author.id})",
-                "Salon": f"{before.channel.name} (ID: {before.channel.id})",
-                "Avant": before.content if before.content else "*Aucun contenu*",
-                "Après": after.content if after.content else "*Aucun contenu*",
-                "Message ID": before.id
+                "Salon": f"{before.channel.mention}",
+                "Avant": before.content[:512] or "(vide)",
+                "Après": after.content[:512] or "(vide)"
             }
         )
+
 # ============================================================
 # COMMANDES DE CONFIGURATION DES LOGS
 # ============================================================
@@ -548,11 +323,24 @@ class LogsConfig(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # ------------------------------------------------------------
-    # /logs setup <catégorie> <salon>
-    # ------------------------------------------------------------
     @commands.command(name="logs_setup")
-    async def logs_setup(self, ctx, category: str, channel: nextcord.TextChannel):
+    @commands.has_permissions(administrator=True)
+    async def logs_setup(self, ctx, category: str = None, channel: nextcord.TextChannel = None):
+        
+        if not category:
+            valid = ", ".join(LOG_CATEGORIES)
+            return await ctx.send(
+                embed=nextcord.Embed(
+                    title="📋 Utilisation : `+logs_setup <catégorie> <salon>`",
+                    description=f"""
+**Exemple :**
+```
+{ctx.author.mention} logs_setup warn #general
+```
+""",
+                    color=0xE74C3C
+                )
+            )
 
         category = category.lower()
 

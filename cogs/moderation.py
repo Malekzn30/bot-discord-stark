@@ -1,7 +1,7 @@
 import nextcord
 from nextcord.ext import commands
-import sqlite3
 from datetime import timedelta
+import sqlite3
 import asyncio
 
 from cogs.logs import send_log   # ← AJOUT OBLIGATOIRE
@@ -219,20 +219,31 @@ class Moderation(commands.Cog):
     @commands.command(name="warn")
     async def warn(self, ctx, member: nextcord.Member = None, *, reason="Aucune raison"):
         if not member:
-            return await ctx.send("❌ Utilise : `+warn @membre [raison]`")
-
-        # Enregistrement dans la base SQLite
+            await ctx.send("❌ Veuillez mentionner un membre.")
+            return
+        
+        if member == ctx.author:
+            await ctx.send("❌ Vous ne pouvez pas vous warn vous-même.")
+            return
+        
         self.cursor.execute("INSERT INTO warns (user_id, reason) VALUES (?, ?)", (member.id, reason))
         self.db.commit()
-
-        await ctx.send(f"⚠️ {member.mention} averti.\n📄 Raison : {reason}")
-
+        
+        warn_count = self.cursor.execute("SELECT COUNT(*) FROM warns WHERE user_id = ?", (member.id,)).fetchone()[0]
+        
+        await ctx.send(f"⚠️ {member.mention} a reçu un **warn**.\n📄 Raison : {reason}\n📊 Total : {warn_count}")
+        
         # 🔥 LOG AUTOMATIQUE
         await send_log(
             self.bot,
             "warn",
-            f"{ctx.author} a warn {member} pour : {reason}",
-            ctx
+            "WARN APPLIQUÉ",
+            {
+                "Auteur": f"{ctx.author} (ID: {ctx.author.id})",
+                "Cible": f"{member} (ID: {member.id})",
+                "Raison": reason,
+                "Total warns": str(warn_count)
+            }
         )
 
     @commands.command(name="warnlist")
