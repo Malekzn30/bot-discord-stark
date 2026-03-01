@@ -4,9 +4,8 @@ from datetime import datetime
 import os
 import json
 import asyncio
-from typing import List
-import nextcord
-from nextcord import ui
+from typing import List, Dict, Any
+from nextcord import ui, Modal, TextInput
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "tickets_config.json")
 DATA_PATH = os.path.join(os.path.dirname(__file__), "tickets_data.json")
@@ -22,7 +21,40 @@ def load_config():
             "access_roles": [],
             "embed_title": "🎫 Ticket",
             "embed_description": "Décrivez votre problème ci‑dessous. Un membre du staff viendra bientôt.",
-            "counter": 0
+            "counter": 0,
+            # Nouvelles fonctionnalités
+            "pre_ticket_message": "🎫 Bienvenue ! Veuillez choisir une catégorie pour votre ticket.",
+            "ticket_open_message": "✅ Votre ticket a été créé ! Notre staff vous aidera dans les plus brefs délais.",
+            "categories": {
+                "support": {
+                    "name": "🛠️ Support Technique",
+                    "description": "Problèmes techniques, bugs, aide",
+                    "emoji": "🛠️",
+                    "color": 0x3498db,
+                    "questions": [
+                        {
+                            "label": "Décrivez votre problème",
+                            "placeholder": "Expliquez en détail ce qui ne fonctionne pas...",
+                            "style": "paragraph",
+                            "required": True
+                        }
+                    ]
+                },
+                "general": {
+                    "name": "💬 Discussion Générale",
+                    "description": "Questions, suggestions, autre",
+                    "emoji": "💬", 
+                    "color": 0x2ecc71,
+                    "questions": [
+                        {
+                            "label": "Quel est le sujet de votre demande ?",
+                            "placeholder": "Décrivez brièvement votre demande...",
+                            "style": "short",
+                            "required": True
+                        }
+                    ]
+                }
+            }
         }
         with open(CONFIG_PATH, "w") as f:
             json.dump(default, f, indent=4)
@@ -81,6 +113,188 @@ TICKET_DATA = load_data()  # { "channel_id": { "thread_id": ..., "owner": ... } 
 PANELS = load_panels()  # { panel_id: {"channel_id":..., "message_id":..., "category":..., "title":..., "description":..., "allowed_roles": [...], "fields": [{"label":"...","style":"short|paragraph"}] } }
 
 
+class TicketQuestionnaire(Modal):
+    """Modal pour le questionnaire avant création de ticket"""
+    def __init__(self, category_key: str, category_data: Dict, bot):
+        super().__init__(title=f"Ticket - {category_data.get('name', 'Questionnaire')}")
+        self.category_key = category_key
+        self.category_data = category_data
+        self.bot = bot
+        
+        # Ajouter les questions dynamiquement
+        for i, question in enumerate(category_data.get("questions", [])):
+            text_input = TextInput(
+                label=question["label"],
+                placeholder=question.get("placeholder", "Tapez votre réponse ici..."),
+                required=question.get("required", True),
+                style=nextcord.TextInputStyle.paragraph if question.get("style") == "paragraph" else nextcord.TextInputStyle.short,
+                custom_id=f"question_{i}"
+            )
+            self.add_item(text_input)
+
+    async def callback(self, interaction: nextcord.Interaction):
+        # Récupérer les réponses
+        responses = {}
+        for i, item in enumerate(self.children):
+            responses[f"question_{i}"] = item.value
+        
+        # Créer le ticket avec les réponses
+        await self._create_ticket_with_responses(interaction, responses)
+
+    async def _create_ticket_with_responses(self, interaction: nextcord.Interaction, responses: Dict):
+        """Créer le ticket avec les réponses du questionnaire"""
+        category_data = self.category_data
+        guild = ctx.guild
+        
+        # Trouver la catégorie Discord
+        discord_category = guild.get_channel(CONFIG.get("category"))
+        if not discord_category:
+            return await ctx.send("❌ La catégorie de tickets n'est pas configurée.", ephemeral=True)
+        
+        # Incrémenter le compteur
+        CONFIG["counter"] = CONFIG.get("counter", 0) + 1
+        save_config(CONFIG)
+        name = f"{category_data.get('emoji', '🎫')}-ticket-{CONFIG['counter']}"
+        
+        # Créer le canal avec permissions
+        overwrites = {
+            guild.default_role: nextcord.PermissionOverwrite(read_messages=False),
+            ctx.author: nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
+        
+        # Ajouter permissions pour les rôles gestionnaires
+        for rid in CONFIG.get("manager_roles", []):
+            role = guild.get_role(rid)
+            if role:
+                overwrites[role] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
+        
+        chan = await guild.create_text_channel(
+            name, 
+            category=discord_category, 
+            overwrites=overwrites,
+            topic=f"Ticket {category_data.get('name')} - {ctx.author}"
+        )
+        
+        # Créer l'embed d'ouverture avec les réponses
+        embed = nextcord.Embed(
+            title=f"{category_data.get('emoji', '🎫')} {category_data.get('name', 'Ticket')}",
+            description=CONFIG.get("ticket_open_message", "✅ Votre ticket a été créé !"),
+            color=category_data.get("color", 0x3498db),
+            timestamp=datetime.utcnow()
+        )
+        embed.set_footer(text=f"Ticket #{CONFIG['counter']} • Créé par {ctx.author}")
+        embed.add_field(name="👤 Utilisateur", value=ctx.author.mention, inline=True)
+        embed.add_field(name="📂 Catégorie", value=category_data.get("name", "Inconnue"), inline=True)
+        
+        # Ajouter les réponses du questionnaire
+        if responses:
+            embed.add_field(name="📝 Réponses", value="", inline=False)
+            for i, question in enumerate(category_data.get("questions", [])):
+                response = responses.get(f"question_{i}", "Non renseigné")
+                embed.add_field(name=question["label"], value=response, inline=False)
+        
+        # Envoyer le message d'ouverture
+        await chan.send(f"{ctx.author.mention} {CONFIG.get('manager_roles', [])}", embed=embed)
+        
+        # Ajouter la vue d'actions
+        view = TicketActionView(self.bot)
+        await chan.send("🛠️ **Actions du ticket** :", view=view)
+        
+        # Sauvegarder les données du ticket
+        thread_id = await self.bot.get_cog("Tickets")._create_log_thread(chan)
+        TICKET_DATA[str(chan.id)] = {
+            "thread_id": thread_id, 
+            "owner": ctx.author.id,
+            "category": self.category_key,
+            "responses": responses
+        }
+        save_data(TICKET_DATA)
+        
+        await ctx.send(f"✅ Ticket créé : {chan.mention}", ephemeral=True)
+
+
+class CategorySelectView(ui.View):
+    """Vue pour la sélection des catégories de tickets"""
+    def __init__(self, bot):
+        super().__init__(timeout=None)
+        self.bot = bot
+        
+        # Ajouter les boutons pour chaque catégorie
+        categories = CONFIG.get("categories", {})
+        for cat_key, cat_data in categories.items():
+            button = ui.Button(
+                label=cat_data.get("name", cat_key.title()),
+                emoji=cat_data.get("emoji"),
+                style=nextcord.ButtonStyle.primary,
+                custom_id=f"category_{cat_key}"
+            )
+            button.callback = self.create_category_callback(cat_key, cat_data)
+            self.add_item(button)
+
+    def create_category_callback(self, category_key: str, category_data: Dict):
+        """Créer un callback pour chaque catégorie"""
+        async def callback(interaction: nextcord.Interaction):
+            # Vérifier si la catégorie a des questions
+            if category_data.get("questions"):
+                # Ouvrir la modal de questionnaire
+                modal = TicketQuestionnaire(category_key, category_data, self.bot)
+                await interaction.response.send_modal(modal)
+            else:
+                # Créer directement le ticket
+                await self._create_simple_ticket(interaction, category_key, category_data)
+        return callback
+
+    async def _create_simple_ticket(self, interaction: nextcord.Interaction, category_key: str, category_data: Dict):
+        """Créer un ticket simple sans questionnaire"""
+        # Logique similaire à TicketQuestionnaire mais sans les questions
+        guild = ctx.guild
+        discord_category = guild.get_channel(CONFIG.get("category"))
+        
+        if not discord_category:
+            return await ctx.send("❌ La catégorie de tickets n'est pas configurée.", ephemeral=True)
+        
+        CONFIG["counter"] = CONFIG.get("counter", 0) + 1
+        save_config(CONFIG)
+        name = f"{category_data.get('emoji', '🎫')}-ticket-{CONFIG['counter']}"
+        
+        overwrites = {
+            guild.default_role: nextcord.PermissionOverwrite(read_messages=False),
+            ctx.author: nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
+        
+        for rid in CONFIG.get("manager_roles", []):
+            role = guild.get_role(rid)
+            if role:
+                overwrites[role] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
+        
+        chan = await guild.create_text_channel(name, category=discord_category, overwrites=overwrites)
+        
+        embed = nextcord.Embed(
+            title=f"{category_data.get('emoji', '🎫')} {category_data.get('name', 'Ticket')}",
+            description=CONFIG.get("ticket_open_message", "✅ Votre ticket a été créé !"),
+            color=category_data.get("color", 0x3498db),
+            timestamp=datetime.utcnow()
+        )
+        embed.set_footer(text=f"Ticket #{CONFIG['counter']} • Créé par {ctx.author}")
+        embed.add_field(name="👤 Utilisateur", value=ctx.author.mention, inline=True)
+        embed.add_field(name="📂 Catégorie", value=category_data.get("name", "Inconnue"), inline=True)
+        
+        await chan.send(f"{ctx.author.mention}", embed=embed)
+        
+        view = TicketActionView(self.bot)
+        await chan.send("🛠️ **Actions du ticket** :", view=view)
+        
+        thread_id = await self.bot.get_cog("Tickets")._create_log_thread(chan)
+        TICKET_DATA[str(chan.id)] = {
+            "thread_id": thread_id, 
+            "owner": ctx.author.id,
+            "category": category_key
+        }
+        save_data(TICKET_DATA)
+        
+        await ctx.send(f"✅ Ticket créé : {chan.mention}", ephemeral=True)
+
+
 class PanelEditView(ui.View):
     def __init__(self, bot, panel_id: str, author):
         super().__init__(timeout=None)
@@ -98,18 +312,18 @@ class PanelEditView(ui.View):
         self.add_item(ui.Button(label="Retour", style=nextcord.ButtonStyle.secondary, custom_id="panel_back"))
 
     async def interaction_check(self, interaction: nextcord.Interaction) -> bool:
-        if interaction.user != self.author and not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Seul l'auteur ou un admin peut modifier.", ephemeral=True)
+        if ctx.author != self.author and not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ Seul l'auteur ou un admin peut modifier.")
             return False
         return True
 
     async def handle_text(self, interaction, prompt, check):
-        await interaction.response.send_message(prompt, ephemeral=True)
+        await ctx.send(prompt)
         try:
             msg = await self.bot.wait_for("message", check=check, timeout=120)
             return msg
         except asyncio.TimeoutError:
-            await interaction.followup.send("⏱️ Temps écoulé, annulation.", ephemeral=True)
+            await interaction.followup.send("⏱️ Temps écoulé, annulation.")
             return None
 
     def panel(self):
@@ -117,139 +331,139 @@ class PanelEditView(ui.View):
 
     @ui.button(label="Titre", style=nextcord.ButtonStyle.primary, custom_id="panel_title")
     async def b_title(self, button, interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         msg = await self.handle_text(interaction, "Nouveau titre? (`cancel` pour annuler)", check)
         if not msg: return
         if msg.content.lower() == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         self.panel()["title"] = msg.content
         save_panels(PANELS)
-        await interaction.followup.send("✅ Titre mis à jour.", ephemeral=True)
+        await interaction.followup.send("✅ Titre mis à jour.")
 
     @ui.button(label="Description", style=nextcord.ButtonStyle.primary, custom_id="panel_description")
     async def b_desc(self, button, interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         msg = await self.handle_text(interaction, "Nouvelle description? (`cancel`)", check)
         if not msg: return
         if msg.content.lower() == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         self.panel()["description"] = msg.content
         save_panels(PANELS)
-        await interaction.followup.send("✅ Description mise à jour.", ephemeral=True)
+        await interaction.followup.send("✅ Description mise à jour.")
 
     @ui.button(label="Canal", style=nextcord.ButtonStyle.primary, custom_id="panel_channel")
     async def b_channel(self, button, interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         msg = await self.handle_text(interaction, "Mentionnez un salon textuel ou `cancel`.", check)
         if not msg: return
         if msg.content.lower() == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         cid = int("".join(ch for ch in msg.content if ch.isdigit()))
-        ch = interaction.guild.get_channel(cid)
+        ch = ctx.guild.get_channel(cid)
         if not isinstance(ch, nextcord.TextChannel):
-            return await interaction.followup.send("⚠️ Salon invalide.", ephemeral=True)
+            return await interaction.followup.send("⚠️ Salon invalide.")
         self.panel()["channel_id"] = ch.id
         save_panels(PANELS)
-        await interaction.followup.send("✅ Salon modifié.", ephemeral=True)
+        await interaction.followup.send("✅ Salon modifié.")
 
     @ui.button(label="Catégorie", style=nextcord.ButtonStyle.primary, custom_id="panel_category")
     async def b_cat(self, button, interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         msg = await self.handle_text(interaction, "Mentionnez une catégorie ou `cancel`.", check)
         if not msg: return
         if msg.content.lower() == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         cid = int("".join(ch for ch in msg.content if ch.isdigit()))
-        cat = interaction.guild.get_channel(cid)
+        cat = ctx.guild.get_channel(cid)
         if not isinstance(cat, nextcord.CategoryChannel):
-            return await interaction.followup.send("⚠️ Catégorie invalide.", ephemeral=True)
+            return await interaction.followup.send("⚠️ Catégorie invalide.")
         self.panel()["category"] = cat.id
         save_panels(PANELS)
-        await interaction.followup.send("✅ Catégorie modifiée.", ephemeral=True)
+        await interaction.followup.send("✅ Catégorie modifiée.")
 
     @ui.button(label="Avertissement", style=nextcord.ButtonStyle.primary, custom_id="panel_warning")
     async def b_warning(self, button, interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         msg = await self.handle_text(interaction, "Envoyez le message d'avertissement (ou `none`/`cancel`).", check)
         if not msg: return
         txt = msg.content
         if txt.lower() == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         if txt.lower() == "none":
             self.panel().pop("warning", None)
         else:
             self.panel()["warning"] = txt
         save_panels(PANELS)
-        await interaction.followup.send("✅ Avertissement mis à jour.", ephemeral=True)
+        await interaction.followup.send("✅ Avertissement mis à jour.")
 
     @ui.button(label="Champs", style=nextcord.ButtonStyle.primary, custom_id="panel_fields")
     async def b_fields(self, button, interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
-        await interaction.response.send_message(
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
+        await ctx.send(
             "Gestion des champs : 1️⃣ ajouter 2️⃣ supprimer\nRépondez 1 ou 2 (`cancel` pour quitter)",
-            ephemeral=True
+            
         )
         try:
             msg = await self.bot.wait_for("message", check=check, timeout=60)
         except asyncio.TimeoutError:
-            return await interaction.followup.send("⏱️ Temps écoulé.", ephemeral=True)
+            return await interaction.followup.send("⏱️ Temps écoulé.")
         if msg.content.lower() == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         choice = msg.content.strip()
         if choice == "1":
-            await interaction.followup.send("Entrez le label du champ, puis `short` ou `paragraph` séparés par |.", ephemeral=True)
+            await interaction.followup.send("Entrez le label du champ, puis `short` ou `paragraph` séparés par |.")
             try:
                 msg2 = await self.bot.wait_for("message", check=check, timeout=60)
             except asyncio.TimeoutError:
-                return await interaction.followup.send("⏱️ Temps écoulé.", ephemeral=True)
+                return await interaction.followup.send("⏱️ Temps écoulé.")
             parts = msg2.content.split("|",1)
             if len(parts)<2:
-                return await interaction.followup.send("Format invalide.", ephemeral=True)
+                return await interaction.followup.send("Format invalide.")
             label, style = parts[0].strip(), parts[1].strip()
             if style not in ("short","paragraph"):
-                return await interaction.followup.send("Style invalide.", ephemeral=True)
+                return await interaction.followup.send("Style invalide.")
             flds = self.panel().setdefault("fields",[])
             flds.append({"label":label,"style":style})
             save_panels(PANELS)
-            await interaction.followup.send(f"✅ Champ '{label}' ajouté.", ephemeral=True)
+            await interaction.followup.send(f"✅ Champ '{label}' ajouté.")
         elif choice == "2":
-            await interaction.followup.send("Indiquez le label du champ à supprimer.", ephemeral=True)
+            await interaction.followup.send("Indiquez le label du champ à supprimer.")
             try:
                 msg2 = await self.bot.wait_for("message", check=check, timeout=60)
             except asyncio.TimeoutError:
-                return await interaction.followup.send("⏱️ Temps écoulé.", ephemeral=True)
+                return await interaction.followup.send("⏱️ Temps écoulé.")
             lbl = msg2.content.strip()
             before = len(self.panel().get("fields",[]))
             self.panel()["fields"] = [f for f in self.panel().get("fields",[]) if f.get("label")!=lbl]
             save_panels(PANELS)
             if len(self.panel().get("fields",[]))<before:
-                await interaction.followup.send(f"✅ Champ '{lbl}' supprimé.", ephemeral=True)
+                await interaction.followup.send(f"✅ Champ '{lbl}' supprimé.")
             else:
-                await interaction.followup.send("⚠️ Champ non trouvé.", ephemeral=True)
+                await interaction.followup.send("⚠️ Champ non trouvé.")
         else:
-            await interaction.followup.send("Choix invalide.", ephemeral=True)
+            await interaction.followup.send("Choix invalide.")
     
     @ui.button(label="Rôles autorisés", style=nextcord.ButtonStyle.secondary, custom_id="panel_allowed")
     async def b_allowed(self, button, interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         msg = await self.handle_text(interaction, "Envoyez les rôles @mention séparés, `none` ou `cancel`.", check)
         if not msg: return
         txt = msg.content.lower()
         if txt == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         if txt == "none":
             self.panel()["allowed_roles"] = []
         else:
             ids = [int("".join(ch for ch in tok if ch.isdigit())) for tok in msg.content.split()]
-            self.panel()["allowed_roles"] = [rid for rid in ids if rid and interaction.guild.get_role(rid)]
+            self.panel()["allowed_roles"] = [rid for rid in ids if rid and interaction.ctx.guild.get_role(rid)]
         save_panels(PANELS)
-        await interaction.followup.send("✅ Rôles mis à jour.", ephemeral=True)
+        await interaction.followup.send("✅ Rôles mis à jour.")
 
     @ui.button(label="Supprimer panel", style=nextcord.ButtonStyle.danger, custom_id="panel_delete")
     async def b_delete(self, button, interaction):
         PANELS.pop(self.panel_id, None)
         save_panels(PANELS)
-        await interaction.response.send_message("✅ Panel supprimé.", ephemeral=True)
+        await ctx.send("✅ Panel supprimé.")
 
     @ui.button(label="Retour", style=nextcord.ButtonStyle.secondary, custom_id="panel_back")
     async def b_back(self, button, interaction):
@@ -268,27 +482,27 @@ class PanelSelect(ui.Select):
         embed = nextcord.Embed(title=f"Panel {pid}", color=0x3498db,
                                    description="Utilisez les boutons ci-dessous pour modifier ce panel (titres, canaux, champs, avertissement ou options).")
         # basic info
-        embed.add_field(name="Titre", value=panel.get("title",""), inline=False)
-        embed.add_field(name="Description", value=panel.get("description",""), inline=False)
-        embed.add_field(name="Canal", value=str(panel.get("channel_id","—")), inline=False)
-        embed.add_field(name="Catégorie", value=str(panel.get("category","—")), inline=False)
-        roles = panel.get("allowed_roles",[])
+        embed.add_field(name="Titre", value=CONFIG.get("embed_title",""), inline=False)
+        embed.add_field(name="Description", value=CONFIG.get("embed_description",""), inline=False)
+        embed.add_field(name="Canal", value=str(CONFIG.get("channel_id","—")), inline=False)
+        embed.add_field(name="Catégorie", value=str(CONFIG.get("category","—")), inline=False)
+        roles = CONFIG.get("allowed_roles",[])
         embed.add_field(name="Rôles autorisés", value=" ".join(f"<@&{r}>" for r in roles) or "aucun", inline=False)
         # warning if any
-        warn = panel.get("warning")
+        warn = CONFIG.get("warning")
         if warn:
             embed.add_field(name="Avertissement", value=warn, inline=False)
         # fields list
-        flds = panel.get("fields",[])
+        flds = CONFIG.get("fields",[])
         if flds:
             embed.add_field(name="Champs", value="\n".join(f['label'] for f in flds), inline=False)
         else:
             embed.add_field(name="Champs", value="(aucun)", inline=False)
         # options
-        opts = panel.get("options",[])
+        opts = CONFIG.get("options",[])
         if opts:
             embed.add_field(name="Options", value="\n".join(o.get('label','') for o in opts), inline=False)
-        view = PanelEditView(interaction.client, pid, interaction.user)
+        view = PanelEditView(interaction.client, pid, ctx.author)
         await interaction.response.edit_message(embed=embed, view=view)
 
 
@@ -321,28 +535,28 @@ class TicketActionView(ui.View):
         # reuse existing logic from Tickets.ticket_close
         TDATA = TICKET_DATA
         if cid not in TDATA:
-            return await interaction.response.send_message("❌ Cette commande ne fonctionne que dans un ticket.", ephemeral=True)
+            return await ctx.send("❌ Cette commande ne fonctionne que dans un ticket.")
         owner = TDATA[cid]["owner"]
-        if interaction.user.id != owner and not any(r.id in CONFIG["manager_roles"] for r in interaction.user.roles):
-            return await interaction.response.send_message("❌ Vous ne pouvez pas fermer ce ticket.", ephemeral=True)
+        if ctx.author.id != owner and not any(r.id in CONFIG["manager_roles"] for r in ctx.author.roles):
+            return await ctx.send("❌ Vous ne pouvez pas fermer ce ticket.")
         await self.bot.get_cog("Tickets")._log_event(interaction.channel.id,
                                                       "✅ Ticket fermé",
-                                                      f"Fermé par {interaction.user}\nRaison : Aucune")
-        await interaction.channel.set_permissions(interaction.user, send_messages=False)
-        await interaction.response.send_message("🔒 Ticket fermé. Le canal restera ouvert.", ephemeral=True)
+                                                      f"Fermé par {ctx.author}\nRaison : Aucune")
+        await interaction.channel.set_permissions(ctx.author, send_messages=False)
+        await ctx.send("🔒 Ticket fermé. Le canal restera ouvert.")
 
     @ui.button(label="Récupérer un billet", style=nextcord.ButtonStyle.primary, custom_id="action_claim")
     async def claim(self, button: ui.Button, interaction: nextcord.Interaction):
         cid = str(interaction.channel.id)
         if cid not in TICKET_DATA:
-            return await interaction.response.send_message("❌ Cette commande ne fonctionne que dans un ticket.", ephemeral=True)
-        if not any(r.id in CONFIG["manager_roles"] for r in interaction.user.roles):
-            return await interaction.response.send_message("❌ Vous n'avez pas la permission de réclamer.", ephemeral=True)
-        await interaction.channel.set_topic(f"Claimed by {interaction.user}")
-        await interaction.response.send_message(f"✋ Ticket pris par {interaction.user.mention}.", ephemeral=True)
+            return await ctx.send("❌ Cette commande ne fonctionne que dans un ticket.")
+        if not any(r.id in CONFIG["manager_roles"] for r in ctx.author.roles):
+            return await ctx.send("❌ Vous n'avez pas la permission de réclamer.")
+        await interaction.channel.set_topic(f"Claimed by {ctx.author}")
+        await ctx.send(f"✋ Ticket pris par {ctx.author.mention}.")
         await self.bot.get_cog("Tickets")._log_event(interaction.channel.id,
                                                       "✋ Ticket réclamé",
-                                                      f"Réclamé par {interaction.user}")
+                                                      f"Réclamé par {ctx.author}")
 
 
 class TicketConfigView(ui.View):
@@ -362,8 +576,8 @@ class TicketConfigView(ui.View):
         self.add_item(ui.Button(label="Assistant complet", style=nextcord.ButtonStyle.success, custom_id="cfg_wizard"))
 
     async def interaction_check(self, interaction: nextcord.Interaction) -> bool:
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Vous devez être administrateur.", ephemeral=True)
+        if not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ Vous devez être administrateur.")
             return False
         return True
 
@@ -372,252 +586,252 @@ class TicketConfigView(ui.View):
         pass
 
     async def handle_text(self, interaction: nextcord.Interaction, prompt: str, check):
-        await interaction.response.send_message(prompt, ephemeral=True)
+        await ctx.send(prompt)
         try:
             msg = await self.bot.wait_for("message", check=check, timeout=120)
             return msg
         except asyncio.TimeoutError:
-            await interaction.followup.send("⏱️ Temps écoulé, annulation.", ephemeral=True)
+            await interaction.followup.send("⏱️ Temps écoulé, annulation.")
             return None
 
     @ui.button(label="Catégorie", style=nextcord.ButtonStyle.primary, custom_id="cfg_category")
     async def button_category(self, button: ui.Button, interaction: nextcord.Interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         msg = await self.handle_text(interaction, "Mentionnez la catégorie ou `none` ; `cancel` pour annuler.", check)
         if not msg: return
         txt = msg.content.lower()
         if txt == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         if txt == "none":
             CONFIG["category"] = None
         else:
             cid = int("".join(ch for ch in msg.content if ch.isdigit()))
-            cat = interaction.guild.get_channel(cid)
+            cat = ctx.guild.get_channel(cid)
             if not isinstance(cat, nextcord.CategoryChannel):
-                return await interaction.followup.send("⚠️ Catégorie invalide.", ephemeral=True)
+                return await interaction.followup.send("⚠️ Catégorie invalide.")
             CONFIG["category"] = cat.id
         save_config(CONFIG)
-        await interaction.followup.send("✅ Catégorie mise à jour.", ephemeral=True)
+        await interaction.followup.send("✅ Catégorie mise à jour.")
 
     @ui.button(label="Logs", style=nextcord.ButtonStyle.primary, custom_id="cfg_logs")
     async def button_logs(self, button: ui.Button, interaction: nextcord.Interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         msg = await self.handle_text(interaction, "Mentionnez le salon de logs ou `none`.", check)
         if not msg: return
         txt = msg.content.lower()
         if txt == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         if txt == "none":
             CONFIG["log_channel"] = None
         else:
             cid = int("".join(ch for ch in msg.content if ch.isdigit()))
-            ch = interaction.guild.get_channel(cid)
+            ch = ctx.guild.get_channel(cid)
             if not isinstance(ch, nextcord.TextChannel):
-                return await interaction.followup.send("⚠️ Salon invalide.", ephemeral=True)
+                return await interaction.followup.send("⚠️ Salon invalide.")
             CONFIG["log_channel"] = ch.id
         save_config(CONFIG)
-        await interaction.followup.send("✅ Salon de logs mis à jour.", ephemeral=True)
+        await interaction.followup.send("✅ Salon de logs mis à jour.")
 
     @ui.button(label="Titre", style=nextcord.ButtonStyle.primary, custom_id="cfg_title")
     async def button_title(self, button: ui.Button, interaction: nextcord.Interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         msg = await self.handle_text(interaction, "Envoyez le nouveau titre (ou `cancel`).", check)
         if not msg: return
         if msg.content.lower() == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         CONFIG["embed_title"] = msg.content
         save_config(CONFIG)
-        await interaction.followup.send("✅ Titre mis à jour.", ephemeral=True)
+        await interaction.followup.send("✅ Titre mis à jour.")
 
     @ui.button(label="Description", style=nextcord.ButtonStyle.primary, custom_id="cfg_description")
     async def button_description(self, button: ui.Button, interaction: nextcord.Interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         msg = await self.handle_text(interaction, "Envoyez la nouvelle description (ou `cancel`).", check)
         if not msg: return
         if msg.content.lower() == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         CONFIG["embed_description"] = msg.content
         save_config(CONFIG)
-        await interaction.followup.send("✅ Description mise à jour.", ephemeral=True)
+        await interaction.followup.send("✅ Description mise à jour.")
 
     @ui.button(label="Gestionnaires", style=nextcord.ButtonStyle.secondary, custom_id="cfg_managers")
     async def button_managers(self, button: ui.Button, interaction: nextcord.Interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         prompt = "Envoyez les rôles gestionnaires (@mention séparés) ou `none`/`cancel`."
         msg = await self.handle_text(interaction, prompt, check)
         if not msg: return
         txt = msg.content.lower()
         if txt == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         if txt == "none":
             CONFIG["manager_roles"] = []
         else:
             ids = [int("".join(ch for ch in tok if ch.isdigit())) for tok in msg.content.split()]
-            CONFIG["manager_roles"] = [rid for rid in ids if rid and interaction.guild.get_role(rid)]
+            CONFIG["manager_roles"] = [rid for rid in ids if rid and interaction.ctx.guild.get_role(rid)]
         save_config(CONFIG)
-        await interaction.followup.send("✅ Rôles gestionnaires mis à jour.", ephemeral=True)
+        await interaction.followup.send("✅ Rôles gestionnaires mis à jour.")
 
     @ui.button(label="Deletors", style=nextcord.ButtonStyle.secondary, custom_id="cfg_deletors")
     async def button_deletors(self, button: ui.Button, interaction: nextcord.Interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         prompt = "Envoyez les rôles deletor (@mention séparés) ou `none`/`cancel`."
         msg = await self.handle_text(interaction, prompt, check)
         if not msg: return
         txt = msg.content.lower()
         if txt == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         if txt == "none":
             CONFIG["deletor_roles"] = []
         else:
             ids = [int("".join(ch for ch in tok if ch.isdigit())) for tok in msg.content.split()]
-            CONFIG["deletor_roles"] = [rid for rid in ids if rid and interaction.guild.get_role(rid)]
+            CONFIG["deletor_roles"] = [rid for rid in ids if rid and interaction.ctx.guild.get_role(rid)]
         save_config(CONFIG)
-        await interaction.followup.send("✅ Rôles deletor mis à jour.", ephemeral=True)
+        await interaction.followup.send("✅ Rôles deletor mis à jour.")
 
     @ui.button(label="Accès", style=nextcord.ButtonStyle.secondary, custom_id="cfg_access")
     async def button_access(self, button: ui.Button, interaction: nextcord.Interaction):
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         prompt = "Envoyez les rôles avec accès (@mention séparés) ou `none` pour tout le monde /`cancel`."
         msg = await self.handle_text(interaction, prompt, check)
         if not msg: return
         txt = msg.content.lower()
         if txt == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         if txt == "none":
             CONFIG["access_roles"] = []
         else:
             ids = [int("".join(ch for ch in tok if ch.isdigit())) for tok in msg.content.split()]
-            CONFIG["access_roles"] = [rid for rid in ids if rid and interaction.guild.get_role(rid)]
+            CONFIG["access_roles"] = [rid for rid in ids if rid and interaction.ctx.guild.get_role(rid)]
         save_config(CONFIG)
-        await interaction.followup.send("✅ Rôles d'accès mis à jour.", ephemeral=True)
+        await interaction.followup.send("✅ Rôles d'accès mis à jour.")
 
     @ui.button(label="Panels", style=nextcord.ButtonStyle.success, custom_id="cfg_panels")
     async def button_panels(self, button: ui.Button, interaction: nextcord.Interaction):
         # display selector to pick a panel to edit
         if not PANELS:
-            return await interaction.response.send_message("❌ Aucun panel configuré.", ephemeral=True)
+            return await ctx.send("❌ Aucun panel configuré.")
         embed = nextcord.Embed(title="Sélectionner un panel", color=0x3498db)
-        view = PanelSelectorView(self.bot, interaction.user)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        view = PanelSelectorView(self.bot, ctx.author)
+        await ctx.send(embed=embed, view=view)
 
     @ui.button(label="Options", style=nextcord.ButtonStyle.secondary, custom_id="cfg_options")
     async def button_options(self, button: ui.Button, interaction: nextcord.Interaction):
         # manage options for a panel
-        def check(m): return m.author == interaction.user and m.channel == interaction.channel
+        def check(m): return m.author == ctx.author and m.channel == interaction.channel
         if not PANELS:
-            return await interaction.response.send_message("❌ Aucun panel à modifier.", ephemeral=True)
-        await interaction.response.send_message(
+            return await ctx.send("❌ Aucun panel à modifier.")
+        await ctx.send(
             "**Gestion des options de panels**\n1️⃣ Ajouter\n2️⃣ Supprimer\n3️⃣ Modifier les champs d'une option\nVotre choix? (1/2/3, `cancel` pour sortir)",
-            ephemeral=True
+            
         )
         try:
             msg = await self.bot.wait_for("message", check=check, timeout=60)
         except asyncio.TimeoutError:
-            return await interaction.followup.send("⏱️ Temps écoulé.", ephemeral=True)
+            return await interaction.followup.send("⏱️ Temps écoulé.")
         if msg.content.lower() == "cancel":
-            return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+            return await interaction.followup.send("❌ Annulé.")
         choice = msg.content.strip()
         if choice == "1":
-            await interaction.followup.send("Mentionnez l'ID du panel puis le nom de l'option, séparés par un espace.", ephemeral=True)
+            await interaction.followup.send("Mentionnez l'ID du panel puis le nom de l'option, séparés par un espace.")
             try:
                 msg2 = await self.bot.wait_for("message", check=check, timeout=60)
             except asyncio.TimeoutError:
-                return await interaction.followup.send("⏱️ Temps écoulé.", ephemeral=True)
+                return await interaction.followup.send("⏱️ Temps écoulé.")
             parts = msg2.content.split(None, 1)
             if len(parts) < 2:
-                return await interaction.followup.send("Format invalide.", ephemeral=True)
+                return await interaction.followup.send("Format invalide.")
             pid, label = parts[0], parts[1]
             panel = PANELS.get(pid)
             if not panel:
-                return await interaction.followup.send("❌ Panel introuvable.", ephemeral=True)
+                return await interaction.followup.send("❌ Panel introuvable.")
             opts = panel.setdefault("options", [])
             opts.append({"label": label, "fields": [{"label": "Sujet", "style": "short"}, {"label": "Description", "style": "paragraph"}]})
             save_panels(PANELS)
-            await interaction.followup.send(f"✅ Option '{label}' ajoutée au panel {pid}.", ephemeral=True)
+            await interaction.followup.send(f"✅ Option '{label}' ajoutée au panel {pid}.")
         elif choice == "2":
-            await interaction.followup.send("Mentionnez l'ID du panel puis le nom de l'option à supprimer.", ephemeral=True)
+            await interaction.followup.send("Mentionnez l'ID du panel puis le nom de l'option à supprimer.")
             try:
                 msg2 = await self.bot.wait_for("message", check=check, timeout=60)
             except asyncio.TimeoutError:
-                return await interaction.followup.send("⏱️ Temps écoulé.", ephemeral=True)
+                return await interaction.followup.send("⏱️ Temps écoulé.")
             parts = msg2.content.split(None, 1)
             if len(parts) < 2:
-                return await interaction.followup.send("Format invalide.", ephemeral=True)
+                return await interaction.followup.send("Format invalide.")
             pid, label = parts[0], parts[1]
             panel = PANELS.get(pid)
             if not panel or "options" not in panel:
-                return await interaction.followup.send("❌ Panel ou options introuvables.", ephemeral=True)
+                return await interaction.followup.send("❌ Panel ou options introuvables.")
             before = len(panel["options"])
             panel["options"] = [o for o in panel["options"] if o.get("label") != label]
             save_panels(PANELS)
-            if len(panel.get("options", [])) < before:
-                await interaction.followup.send(f"✅ Option '{label}' supprimée.", ephemeral=True)
+            if len(CONFIG.get("options", [])) < before:
+                await interaction.followup.send(f"✅ Option '{label}' supprimée.")
             else:
-                await interaction.followup.send("⚠️ Option non trouvée.", ephemeral=True)
+                await interaction.followup.send("⚠️ Option non trouvée.")
         elif choice == "3":
-            await interaction.followup.send("Mentionnez l'ID du panel puis le nom de l'option à modifier.", ephemeral=True)
+            await interaction.followup.send("Mentionnez l'ID du panel puis le nom de l'option à modifier.")
             try:
                 msg2 = await self.bot.wait_for("message", check=check, timeout=60)
             except asyncio.TimeoutError:
-                return await interaction.followup.send("⏱️ Temps écoulé.", ephemeral=True)
+                return await interaction.followup.send("⏱️ Temps écoulé.")
             parts = msg2.content.split(None, 1)
             if len(parts) < 2:
-                return await interaction.followup.send("Format invalide.", ephemeral=True)
+                return await interaction.followup.send("Format invalide.")
             pid, label = parts[0], parts[1]
             panel = PANELS.get(pid)
             if not panel or "options" not in panel:
-                return await interaction.followup.send("❌ Panel ou options introuvables.", ephemeral=True)
+                return await interaction.followup.send("❌ Panel ou options introuvables.")
             opt = next((o for o in panel["options"] if o.get("label") == label), None)
             if not opt:
-                return await interaction.followup.send("⚠️ Option non trouvée.", ephemeral=True)
+                return await interaction.followup.send("⚠️ Option non trouvée.")
             # manage fields of this option similar to panel fields
-            await interaction.followup.send("Gestion des champs : 1️⃣ ajouter 2️⃣ supprimer\nRépondez 1 ou 2 (`cancel` pour quitter)", ephemeral=True)
+            await interaction.followup.send("Gestion des champs : 1️⃣ ajouter 2️⃣ supprimer\nRépondez 1 ou 2 (`cancel` pour quitter)")
             try:
                 msg3 = await self.bot.wait_for("message", check=check, timeout=60)
             except asyncio.TimeoutError:
-                return await interaction.followup.send("⏱️ Temps écoulé.", ephemeral=True)
+                return await interaction.followup.send("⏱️ Temps écoulé.")
             if msg3.content.lower() == "cancel":
-                return await interaction.followup.send("❌ Annulé.", ephemeral=True)
+                return await interaction.followup.send("❌ Annulé.")
             sub = msg3.content.strip()
             if sub == "1":
-                await interaction.followup.send("Entrez le label du champ, puis `short` ou `paragraph` séparés par |.", ephemeral=True)
+                await interaction.followup.send("Entrez le label du champ, puis `short` ou `paragraph` séparés par |.")
                 try:
                     msg4 = await self.bot.wait_for("message", check=check, timeout=60)
                 except asyncio.TimeoutError:
-                    return await interaction.followup.send("⏱️ Temps écoulé.", ephemeral=True)
+                    return await interaction.followup.send("⏱️ Temps écoulé.")
                 parts2 = msg4.content.split("|",1)
                 if len(parts2)<2:
-                    return await interaction.followup.send("Format invalide.", ephemeral=True)
+                    return await interaction.followup.send("Format invalide.")
                 lbl, style = parts2[0].strip(), parts2[1].strip()
                 if style not in ("short","paragraph"):
-                    return await interaction.followup.send("Style invalide.", ephemeral=True)
+                    return await interaction.followup.send("Style invalide.")
                 opt.setdefault("fields",[]).append({"label":lbl,"style":style})
                 save_panels(PANELS)
-                await interaction.followup.send(f"✅ Champ '{lbl}' ajouté à l'option.", ephemeral=True)
+                await interaction.followup.send(f"✅ Champ '{lbl}' ajouté à l'option.")
             elif sub == "2":
-                await interaction.followup.send("Indiquez le label du champ à supprimer.", ephemeral=True)
+                await interaction.followup.send("Indiquez le label du champ à supprimer.")
                 try:
                     msg4 = await self.bot.wait_for("message", check=check, timeout=60)
                 except asyncio.TimeoutError:
-                    return await interaction.followup.send("⏱️ Temps écoulé.", ephemeral=True)
+                    return await interaction.followup.send("⏱️ Temps écoulé.")
                 lbl = msg4.content.strip()
                 before = len(opt.get("fields",[]))
                 opt["fields"] = [f for f in opt.get("fields",[]) if f.get("label")!=lbl]
                 save_panels(PANELS)
                 if len(opt.get("fields",[]))<before:
-                    await interaction.followup.send(f"✅ Champ '{lbl}' supprimé.", ephemeral=True)
+                    await interaction.followup.send(f"✅ Champ '{lbl}' supprimé.")
                 else:
-                    await interaction.followup.send("⚠️ Champ non trouvé.", ephemeral=True)
+                    await interaction.followup.send("⚠️ Champ non trouvé.")
             else:
-                await interaction.followup.send("Choix invalide.", ephemeral=True)
+                await interaction.followup.send("Choix invalide.")
         else:
-            await interaction.followup.send("Choix invalide.", ephemeral=True)
+            await interaction.followup.send("Choix invalide.")
 
     @ui.button(label="Assistant complet", style=nextcord.ButtonStyle.success, custom_id="cfg_wizard")
     async def button_wizard(self, button: ui.Button, interaction: nextcord.Interaction):
-        await interaction.response.send_message(
+        await ctx.send(
             "Tapez `+ticket setup wizard` pour lancer l'assistant pas-à-pas.",
-            ephemeral=True
+            
         )
 
 
@@ -639,17 +853,16 @@ class Tickets(commands.Cog):
                 pass
 
     # ---------------------------
-    # commandes de configuration
+    # Commande principale de ticket (désactivée - utilisation via panels)
     # ---------------------------
     @commands.group(name="ticket", invoke_without_command=True)
     async def ticket(self, ctx):
-        """+ticket → ouvre un nouveau ticket"""
-        # contrôle des rôles « access »
-        if CONFIG["access_roles"]:
-            if not any(r.id in CONFIG["access_roles"] for r in ctx.author.roles):
-                return await ctx.send("❌ Vous n'avez pas le rôle requis pour ouvrir un ticket.")
-        await self._open_ticket(ctx)
+        """⚠️ Utilisez les boutons dans le panel de tickets pour créer un ticket"""
+        await ctx.send("🎫 Pour créer un ticket, utilisez les boutons dans le panel de tickets !\nSi vous êtes admin, utilisez `+ticket setup panel_add` pour créer un panel.")
 
+    # ---------------------------
+    # Commandes de configuration
+    # ---------------------------
     @commands.group(name="setup", invoke_without_command=True)
     @commands.has_permissions(administrator=True)
     async def ticket_setup(self, ctx):
@@ -658,13 +871,14 @@ class Tickets(commands.Cog):
             title="📋 Configuration des tickets",
             color=0x3498db,
             description=(
-                f"Catégorie actuelle : <#{CONFIG['category']}>\n"
-                f"Salon de logs : <#{CONFIG['log_channel']}>\n"
-                f"Rôles gestionnaires : {', '.join(f'<@&{r}>' for r in CONFIG['manager_roles']) or 'aucun'}\n"
-                f"Rôles suppression : {', '.join(f'<@&{r}>' for r in CONFIG['deletor_roles']) or 'aucun'}\n"
-                f"Rôles accès : {', '.join(f'<@&{r}>' for r in CONFIG['access_roles']) or 'tout le monde'}\n"
-                f"Titre embed : {CONFIG['embed_title']}\n"
-                f"Description embed : {CONFIG['embed_description']}"
+                f"Catégorie actuelle : <#{CONFIG.get('category')}>\n"
+                f"Salon de logs : <#{CONFIG.get('log_channel')}>\n"
+                f"Rôles gestionnaires : {', '.join(f'<@&{r}>' for r in CONFIG.get('manager_roles', [])) or 'aucun'}\n"
+                f"Rôles suppression : {', '.join(f'<@&{r}>' for r in CONFIG.get('deletor_roles', [])) or 'aucun'}\n"
+                f"Rôles accès : {', '.join(f'<@&{r}>' for r in CONFIG.get('access_roles', [])) or 'tout le monde'}\n"
+                f"Message avant ticket : {CONFIG.get('pre_ticket_message', 'Non configuré')}\n"
+                f"Message d'ouverture : {CONFIG.get('ticket_open_message', 'Non configuré')}\n"
+                f"Catégories configurées : {len(CONFIG.get('categories', {}))}"
             )
         )
         view = TicketConfigView(self.bot)
@@ -681,6 +895,88 @@ class Tickets(commands.Cog):
         CONFIG["category"] = category.id
         save_config(CONFIG)
         await ctx.send(f"✅ Catégorie de tickets définie sur {category.mention}.")
+
+    @ticket_setup.command(name="categories")
+    @commands.has_permissions(administrator=True)
+    async def setup_categories(self, ctx, action: str = None, *, name: str = None):
+        """Gérer les catégories de tickets.
+        
+        Usage : 
+        +ticket setup categories list - Lister les catégories
+        +ticket setup categories add "Nom de la catégorie" - Ajouter une catégorie
+        +ticket setup categories remove "Nom de la catégorie" - Supprimer une catégorie
+        """
+        if not action:
+            # Afficher le menu interactif pour gérer les catégories
+            embed = nextcord.Embed(
+                title="📂 Gestion des Catégories",
+                description="Choisissez une action pour gérer les catégories de tickets.",
+                color=0x3498db
+            )
+            
+            categories = CONFIG.get("categories", {})
+            if categories:
+                for cat_key, cat_data in categories.items():
+                    embed.add_field(
+                        name=f"{cat_data.get('emoji', '🎫')} {cat_data.get('name', cat_key.title())}",
+                        value=f"ID: `{cat_key}`\n{cat_data.get('description', 'Aucune description')}\n{len(cat_data.get('questions', []))} question(s)",
+                        inline=False
+                    )
+            else:
+                embed.description += "\n\n⚠️ Aucune catégorie configurée."
+            
+            view = CategoryManagementView(self.bot)
+            await ctx.send(embed=embed, view=view)
+            return
+        
+        action = action.lower()
+        
+        if action == "list":
+            categories = CONFIG.get("categories", {})
+            if not categories:
+                return await ctx.send("❌ Aucune catégorie configurée.")
+            
+            embed = nextcord.Embed(title="📂 Catégories de Tickets", color=0x3498db)
+            for cat_key, cat_data in categories.items():
+                embed.add_field(
+                    name=f"{cat_data.get('emoji', '🎫')} {cat_data.get('name', cat_key.title())}",
+                    value=f"**ID**: `{cat_key}`\n**Description**: {cat_data.get('description', 'Aucune')}\n**Questions**: {len(cat_data.get('questions', []))}",
+                    inline=False
+                )
+            await ctx.send(embed=embed)
+            
+        elif action == "add" and name:
+            # Lancer le modal pour ajouter une catégorie
+            modal = CategoryCreationModal(name)
+            await ctx.send("🛠️ Configuration de la nouvelle catégorie :", view=CategorySetupView(self.bot, name))
+            
+        else:
+            await ctx.send("❌ Usage invalide. Utilisez `+ticket setup categories` pour le menu interactif.")
+
+    @ticket_setup.command(name="message")
+    @commands.has_permissions(administrator=True)
+    async def setup_message(self, ctx, message_type: str, *, message: str = None):
+        """Configurer les messages personnalisés.
+        
+        Usage :
+        +ticket setup message pre "Message avant création"
+        +ticket setup message open "Message d'ouverture"
+        """
+        message_type = message_type.lower()
+        
+        if message_type not in ["pre", "open", "avant", "ouverture"]:
+            return await ctx.send("❌ Type invalide. Utilisez `pre`/`avant` ou `open`/`ouverture`.")        
+        if not message:
+            return await ctx.send("❌ Vous devez fournir un message.")
+        
+        if message_type in ["pre", "avant"]:
+            CONFIG["pre_ticket_message"] = message
+            await ctx.send("✅ Message avant création de ticket mis à jour.")
+        else:
+            CONFIG["ticket_open_message"] = message
+            await ctx.send("✅ Message d'ouverture de ticket mis à jour.")
+        
+        save_config(CONFIG)
 
     @ticket_setup.command(name="logs")
     @commands.has_permissions(administrator=True)
@@ -790,37 +1086,52 @@ class Tickets(commands.Cog):
 
     @ticket_setup.command(name="panel_add")
     @commands.has_permissions(administrator=True)
-    async def panel_add(self, ctx, channel: nextcord.TextChannel, category: nextcord.CategoryChannel, *, title: str = "🎫 Ticket", description: str = "Cliquez pour ouvrir un ticket."):
-        """Créer un panel de ticket minimal et l'envoyer dans <channel>.
-
-        Les champs par défaut (sujet+description) peuvent être modifiés, et un
-        avertissement ou des options spécifiques ajoutés via ``+ticket setup``
-        (boutons "Panels" puis sélection du panel) ou avec la commande
-        interactive correspondante.
+    async def panel_add(self, ctx, channel: nextcord.TextChannel, *, title: str = "🎫 Création de Ticket"):
         """
+        Créer un panel de tickets avec les catégories configurées.
+        
+        Usage: +ticket setup panel_add #salon "Titre du panel"
+        """
+        # Vérifier qu'il y a des catégories configurées
+        categories = CONFIG.get("categories", {})
+        if not categories:
+            return await ctx.send("❌ Aucune catégorie configurée ! Utilisez `+ticket setup categories` d'abord.")
+        
+        # Créer l'embed pour le panel
+        embed = nextcord.Embed(
+            title=title,
+            description=CONFIG.get("pre_ticket_message", "🎫 Choisissez une catégorie pour votre ticket :"),
+            color=0x3498db,
+            timestamp=datetime.utcnow()
+        )
+        
+        # Ajouter les informations sur chaque catégorie
+        for cat_key, cat_data in categories.items():
+            embed.add_field(
+                name=f"{cat_data.get('emoji', '🎫')} {cat_data.get('name', cat_key.title())}",
+                value=cat_data.get('description', 'Aucune description'),
+                inline=True
+            )
+        
+        # Créer le panel
         pid = str(int(datetime.utcnow().timestamp() * 1000))
         panel = {
             "channel_id": channel.id,
             "message_id": None,
-            "category": category.id,
             "title": title,
-            "description": description,
-            "allowed_roles": [],
-            # default fields: sujet (short) + description (paragraph)
-            "fields": [
-                {"label": "Sujet", "style": "short"},
-                {"label": "Description", "style": "paragraph"}
-            ]
+            "description": CONFIG.get("pre_ticket_message", "🎫 Choisissez une catégorie pour votre ticket :"),
+            "allowed_roles": []
         }
         PANELS[pid] = panel
         save_panels(PANELS)
-
-        view = TicketPanelView(self.bot, pid)
-        sent = await channel.send(embed=nextcord.Embed(title=title, description=description, color=0x3498db), view=view)
+        
+        # Créer la vue avec les boutons de catégories
+        view = CategoryPanelView(self.bot, pid)
+        sent = await channel.send(embed=embed, view=view)
         panel["message_id"] = sent.id
         save_panels(PANELS)
-
-        await ctx.send(f"✅ Panel créé et envoyé (id: {pid}) dans {channel.mention}.")
+        
+        await ctx.send(f"✅ Panel créé dans {channel.mention} !\nLes membres peuvent maintenant cliquer sur les boutons pour créer des tickets.")
 
     @ticket_setup.command(name="panel_remove")
     @commands.has_permissions(administrator=True)
@@ -847,6 +1158,7 @@ class Tickets(commands.Cog):
                      f"— title: {p.get('title')} "
                      f"— options: {optcount}\n")
         await ctx.send(embed=nextcord.Embed(title="Panels", description=desc, color=0x3498db))
+
 
     @ticket_setup.command(name="access_remove", aliases=["removeaccess","access-remove","remove_access"])
     @commands.has_permissions(administrator=True)
@@ -986,7 +1298,8 @@ class Tickets(commands.Cog):
         save_config(CONFIG)
         await ctx.send("✅ Configuration sauvegardée !")
 
-    # ---------------------------
+
+    # ----------------------------------
     # actions dans un ticket
     # ---------------------------
     @ticket.command(name="claim")
@@ -1013,7 +1326,7 @@ class Tickets(commands.Cog):
         # empêche l'auteur d'envoyer à nouveau
         await ctx.channel.set_permissions(ctx.author, send_messages=False)
         await ctx.send("🔒 Ticket fermé. Le canal restera ouvert.")
-    
+
     @ticket.command(name="delete")
     async def ticket_delete(self, ctx):
         cid = str(ctx.channel.id)
@@ -1030,10 +1343,15 @@ class Tickets(commands.Cog):
 
     # ---------------------------
     # helpers & logs
-    # ---------------------------
+    # ------------------------------
     async def _open_ticket(self, ctx):
-        # Backwards-compatible: if called without panel, use global CONFIG
         category_id = CONFIG.get("category")
+        if category_id is None:
+            # fallback vers la première catégorie définie dans un panel
+            for p in PANELS.values():
+                if p.get("category"):
+                    category_id = p["category"]
+                    break
         if category_id is None:
             return await ctx.send("❌ La catégorie de tickets n'est pas configurée.")
         category = ctx.guild.get_channel(category_id)
@@ -1045,31 +1363,29 @@ class Tickets(commands.Cog):
         save_config(CONFIG)
         name = f"ticket-{CONFIG['counter']}"
 
-        overwrites = {
-            ctx.guild.default_role: nextcord.PermissionOverwrite(read_messages=False),
-            ctx.author: nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
-        }
-        for rid in CONFIG["manager_roles"]:
+        overwrites = {ctx.guild.default_role: nextcord.PermissionOverwrite(read_messages=False)}
+        overwrites[ctx.author] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
+        for rid in CONFIG.get("manager_roles", []):
             role = ctx.guild.get_role(rid)
             if role:
                 overwrites[role] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
 
         chan = await ctx.guild.create_text_channel(name, category=category, overwrites=overwrites)
         embed = nextcord.Embed(
-            title=CONFIG["embed_title"],
-            description=CONFIG["embed_description"],
+            title=panel.get("title", CONFIG.get("embed_title")),
+            description=panel.get("description", CONFIG.get("embed_description")),
             color=0x95A5A6,
             timestamp=datetime.utcnow()
         )
         embed.set_footer(text=f"Ticket #{CONFIG['counter']}")
         await chan.send(ctx.author.mention, embed=embed)
 
-        # création du thread de logs
         thread_id = await self._create_log_thread(chan)
         TICKET_DATA[str(chan.id)] = {"thread_id": thread_id, "owner": ctx.author.id}
         save_data(TICKET_DATA)
 
-        await ctx.send(f"✅ Ticket créé : {chan.mention}")
+        await ctx.send(
+            f"✅ Ticket créé : {chan.mention}")
 
     async def _create_log_thread(self, ticket_chan: nextcord.TextChannel):
         if CONFIG["log_channel"] is None:
@@ -1111,6 +1427,14 @@ class Tickets(commands.Cog):
             await self._log_event(message.channel.id, "💬 Message", f"{message.author} :\n{message.content or '(embed/fichier)'}")
 
     @commands.Cog.listener()
+
+    async def interaction_check(self, interaction: nextcord.Interaction) -> bool:
+        if not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ Vous devez être administrateur.", ephemeral=True)
+            return False
+        return True
+
+    @commands.Cog.listener()
     async def on_message_edit(self, before, after):
         if before.author.bot:
             return
@@ -1131,6 +1455,157 @@ class Tickets(commands.Cog):
                                   f"{message.author} :\n{message.content or '(embed/fichier)'}")
 
 
+class CategoryPanelView(ui.View):
+    """Vue pour les panels de tickets avec boutons de catégories"""
+    def __init__(self, bot, panel_id: str):
+        super().__init__(timeout=None)
+        self.bot = bot
+        self.panel_id = panel_id
+        
+        # Ajouter les boutons pour chaque catégorie
+        categories = CONFIG.get("categories", {})
+        for cat_key, cat_data in categories.items():
+            button = ui.Button(
+                label=cat_data.get("name", cat_key.title()),
+                emoji=cat_data.get("emoji"),
+                style=nextcord.ButtonStyle.primary,
+                custom_id=f"panel_category_{cat_key}"
+            )
+            button.callback = self.create_category_callback(cat_key, cat_data)
+            self.add_item(button)
+
+    def create_category_callback(self, category_key: str, category_data: Dict):
+        """Créer un callback pour chaque catégorie"""
+        async def callback(interaction: nextcord.Interaction):
+            # Vérifier les permissions d'accès
+            if CONFIG.get("access_roles"):
+                if not any(r.id in CONFIG["access_roles"] for r in interaction.user.roles):
+                    return await interaction.response.send_message("❌ Vous n'avez pas le rôle requis pour ouvrir un ticket.", ephemeral=True)
+            
+            # Vérifier si la catégorie a des questions
+            if category_data.get("questions"):
+                # Ouvrir la modal de questionnaire
+                modal = TicketQuestionnaire(category_key, category_data, self.bot)
+                await interaction.response.send_modal(modal)
+            else:
+                # Créer directement le ticket
+                await self._create_simple_ticket(interaction, category_key, category_data)
+        return callback
+
+    async def _create_simple_ticket(self, interaction: nextcord.Interaction, category_key: str, category_data: Dict):
+        """Créer un ticket simple sans questionnaire"""
+        guild = interaction.guild
+        discord_category = guild.get_channel(CONFIG.get("category"))
+        
+        if not discord_category:
+            return await interaction.response.send_message("❌ La catégorie de tickets n'est pas configurée.", ephemeral=True)
+        
+        CONFIG["counter"] = CONFIG.get("counter", 0) + 1
+        save_config(CONFIG)
+        name = f"{category_data.get('emoji', '🎫')}-ticket-{CONFIG['counter']}"
+        
+        overwrites = {
+            guild.default_role: nextcord.PermissionOverwrite(read_messages=False),
+            interaction.user: nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
+        
+        for rid in CONFIG.get("manager_roles", []):
+            role = guild.get_role(rid)
+            if role:
+                overwrites[role] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
+        
+        chan = await guild.create_text_channel(name, category=discord_category, overwrites=overwrites)
+        
+        embed = nextcord.Embed(
+            title=f"{category_data.get('emoji', '🎫')} {category_data.get('name', 'Ticket')}",
+            description=CONFIG.get("ticket_open_message", "✅ Votre ticket a été créé !"),
+            color=category_data.get("color", 0x3498db),
+            timestamp=datetime.utcnow()
+        )
+        embed.set_footer(text=f"Ticket #{CONFIG['counter']} • Créé par {interaction.user}")
+        embed.add_field(name="👤 Utilisateur", value=interaction.user.mention, inline=True)
+        embed.add_field(name="📂 Catégorie", value=category_data.get("name", "Inconnue"), inline=True)
+        
+        await chan.send(f"{interaction.user.mention}", embed=embed)
+        
+        view = TicketActionView(self.bot)
+        await chan.send("🛠️ **Actions du ticket** :", view=view)
+        
+        thread_id = await self.bot.get_cog("Tickets")._create_log_thread(chan)
+        TICKET_DATA[str(chan.id)] = {
+            "thread_id": thread_id, 
+            "owner": interaction.user.id,
+            "category": category_key
+        }
+        save_data(TICKET_DATA)
+        
+        await interaction.response.send_message(f"✅ Ticket créé : {chan.mention}", ephemeral=True)
+
+
+class TicketActionView(ui.View):
+    """Vue pour les actions dans un ticket (claim, close, delete)"""
+    def __init__(self, bot):
+        super().__init__(timeout=None)
+        self.bot = bot
+        
+        self.add_item(ui.Button(
+            label="✋ Réclamer", 
+            style=nextcord.ButtonStyle.primary,
+            custom_id="ticket_claim"
+        ))
+        
+        self.add_item(ui.Button(
+            label="🔒 Fermer", 
+            style=nextcord.ButtonStyle.secondary,
+            custom_id="ticket_close"
+        ))
+        
+        self.add_item(ui.Button(
+            label="🗑️ Supprimer", 
+            style=nextcord.ButtonStyle.danger,
+            custom_id="ticket_delete"
+        ))
+
+    async def interaction_check(self, interaction: nextcord.Interaction) -> bool:
+        # Vérifier si on est dans un ticket
+        if str(interaction.channel.id) not in TICKET_DATA:
+            await interaction.response.send_message("❌ Cette commande ne fonctionne que dans un ticket.", ephemeral=True)
+            return False
+        return True
+
+    @ui.button(label="✋ Réclamer", style=nextcord.ButtonStyle.primary, custom_id="ticket_claim")
+    async def claim_ticket(self, button: ui.Button, interaction: nextcord.Interaction):
+        if not any(r.id in CONFIG.get("manager_roles", []) for r in interaction.user.roles):
+            return await interaction.response.send_message("❌ Vous n'avez pas la permission de réclamer.", ephemeral=True)
+        
+        await interaction.channel.set_topic(f"Claimed by {interaction.user}")
+        await interaction.response.send_message(f"✋ Ticket pris par {interaction.user.mention}.")
+        await self.bot.get_cog("Tickets")._log_event(interaction.channel.id, "✋ Ticket réclamé", f"Réclamé par {interaction.user}")
+
+    @ui.button(label="🔒 Fermer", style=nextcord.ButtonStyle.secondary, custom_id="ticket_close")
+    async def close_ticket(self, button: ui.Button, interaction: nextcord.Interaction):
+        cid = str(interaction.channel.id)
+        ticket_data = TICKET_DATA.get(cid, {})
+        owner = ticket_data.get("owner")
+        
+        if interaction.user.id != owner and not any(r.id in CONFIG.get("manager_roles", []) for r in interaction.user.roles):
+            return await interaction.response.send_message("❌ Vous ne pouvez pas fermer ce ticket.", ephemeral=True)
+        
+        await self.bot.get_cog("Tickets")._log_event(interaction.channel.id, "✅ Ticket fermé", f"Fermé par {interaction.user}")
+        await interaction.channel.set_permissions(interaction.user, send_messages=False)
+        await interaction.response.send_message("🔒 Ticket fermé. Le canal restera ouvert.")
+
+    @ui.button(label="🗑️ Supprimer", style=nextcord.ButtonStyle.danger, custom_id="ticket_delete")
+    async def delete_ticket(self, button: ui.Button, interaction: nextcord.Interaction):
+        if not any(r.id in CONFIG.get("deletor_roles", []) for r in interaction.user.roles):
+            return await interaction.response.send_message("❌ Vous n'avez pas la permission de supprimer ce ticket.", ephemeral=True)
+        
+        await self.bot.get_cog("Tickets")._log_event(interaction.channel.id, "🗑️ Ticket supprimé", f"Supprimé par {interaction.user}")
+        await interaction.channel.delete(reason=f"Ticket supprimé par {interaction.user}")
+        TICKET_DATA.pop(str(interaction.channel.id), None)
+        save_data(TICKET_DATA)
+
+
 def setup(bot):
     bot.add_cog(Tickets(bot))
 
@@ -1141,125 +1616,58 @@ class TicketPanelView(ui.View):
         self.bot = bot
         self.panel_id = panel_id
 
-    @ui.button(label="Ouvrir un ticket", style=nextcord.ButtonStyle.primary, custom_id="ticket_open_button")
-    async def open_button(self, button: ui.Button, interaction: nextcord.Interaction):
-        pid = self.panel_id
-        panel = PANELS.get(pid)
+    @ui.button(label="Ouvrir un ticket", style=nextcord.ButtonStyle.primary,
+               custom_id="ticket_open_button")
+    async def open_button(self, button: ui.Button,
+                          interaction: nextcord.Interaction):
+        panel = PANELS.get(self.panel_id)
         if not panel:
-            return await interaction.response.send_message("❌ Panel introuvable.", ephemeral=True)
+            return await ctx.send(
+                "❌ Panel introuvable.")
 
-        # permission check
-        allowed = panel.get("allowed_roles", []) or []
-        if allowed:
-            if not any(r.id in allowed for r in interaction.user.roles):
-                return await interaction.response.send_message("❌ Vous n'avez pas la permission d'ouvrir ce ticket.", ephemeral=True)
-        # warn first so it's shown even if there are options
-        warn = panel.get("warning")
+        allowed = CONFIG.get("allowed_roles", [])
+        if allowed and not any(r.id in allowed for r in ctx.author.roles):
+            return await ctx.send(
+                "❌ Vous n'avez pas la permission d'ouvrir ce ticket.",
+                )
+
+        warn = CONFIG.get("warning")
         if warn:
-            wembed = nextcord.Embed(description=warn, color=0xFFA500)
-            await interaction.response.send_message(embed=wembed, ephemeral=True)
+            await ctx.send(
+                embed=nextcord.Embed(description=warn, color=0xFFA500),
+                )
             await asyncio.sleep(0.5)
-        # if the panel has options, ask the user to pick one first
-        opts = panel.get("options", [])
-        if opts:
-            # create a view with select menu
-            class OptionSelector(ui.Select):
-                def __init__(self):
-                    select_opts = []
-                    for idx, o in enumerate(opts):
-                        select_opts.append(nextcord.SelectOption(label=o.get("label","option"), value=str(idx)))
-                    super().__init__(placeholder="Choisissez une option…", min_values=1, max_values=1, options=select_opts)
 
-                async def callback(self, interaction: nextcord.Interaction):
-                    choice = int(self.values[0])
-                    opt = opts[choice]
-                    # build modal using the chosen option's fields
-                    class OptModal(ui.Modal):
-                        def __init__(self):
-                            super().__init__(title=opt.get("label", panel.get("title","Ticket")))
-                            for f in opt.get("fields", []):
-                                style = nextcord.TextInputStyle.short if f.get("style") == "short" else nextcord.TextInputStyle.paragraph
-                                self.add_item(nextcord.ui.TextInput(label=f.get("label","Réponse"), style=style, required=True))
+        guild = ctx.guild
+        category = guild.get_channel(CONFIG.get("category"))
+        if category is None:
+            return await ctx.send(
+                "❌ Catégorie du panel invalide.")
 
-                        async def callback(self, modal_interaction: nextcord.Interaction):
-                            # reuse creation logic from parent open_button
-                            guild = modal_interaction.guild
-                            category = guild.get_channel(panel.get("category"))
-                            if category is None:
-                                return await modal_interaction.response.send_message("❌ Catégorie du panel invalide.", ephemeral=True)
-                            CONFIG["counter"] = CONFIG.get("counter", 0) + 1
-                            save_config(CONFIG)
-                            name = f"ticket-{CONFIG['counter']}"
-                            overwrites = {guild.default_role: nextcord.PermissionOverwrite(read_messages=False)}
-                            overwrites[modal_interaction.user] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
-                            for rid in CONFIG.get("manager_roles", []):
-                                role = guild.get_role(rid)
-                                if role:
-                                    overwrites[role] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
-                            chan = await guild.create_text_channel(name, category=category, overwrites=overwrites)
-                            desc = ""
-                            for item in self.children:
-                                desc += f"**{item.label}**\n{item.value}\n\n"
-                            embed = nextcord.Embed(title=panel.get("title","Ticket ouvert"), description=panel.get("description",""), color=0x95A5A6, timestamp=datetime.utcnow())
-                            embed.add_field(name="Infos", value=desc, inline=False)
-                            embed.set_footer(text=f"Ticket #{CONFIG['counter']}")
-                            await chan.send(modal_interaction.user.mention, embed=embed)
-                            TICKET_DATA[str(chan.id)] = {"thread_id": None, "owner": modal_interaction.user.id}
-                            save_data(TICKET_DATA)
-                            await modal_interaction.response.send_message(f"✅ Ticket créé : {chan.mention}", ephemeral=True)
-                    await interaction.response.send_modal(OptModal())
+        CONFIG["counter"] = CONFIG.get("counter", 0) + 1
+        save_config(CONFIG)
+        name = f"ticket-{CONFIG['counter']}"
 
-            view = ui.View(timeout=None)
-            view.add_item(OptionSelector())
-            return await interaction.response.send_message("Veuillez choisir une option pour votre ticket :", view=view, ephemeral=True)
+        overwrites = {ctx.guild.default_role: nextcord.PermissionOverwrite(read_messages=False)}
+        overwrites[ctx.author] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
+        for rid in CONFIG.get("manager_roles", []):
+            role = ctx.guild.get_role(rid)
+            if role:
+                overwrites[role] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-        # build modal
-        class TicketModal(ui.Modal):
-            def __init__(self):
-                super().__init__(title=panel.get("title", "Ticket"))
-                for f in panel.get("fields", []):
-                    style = nextcord.TextInputStyle.short if f.get("style") == "short" else nextcord.TextInputStyle.paragraph
-                    self.add_item(nextcord.ui.TextInput(label=f.get("label", "Réponse"), style=style, required=True))
+        chan = await ctx.guild.create_text_channel(name, category=category, overwrites=overwrites)
+        embed = nextcord.Embed(
+            title=panel.get("title", CONFIG.get("embed_title")),
+            description=panel.get("description", CONFIG.get("embed_description")),
+            color=0x95A5A6,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_footer(text=f"Ticket #{CONFIG['counter']}")
+        await chan.send(ctx.author.mention, embed=embed)
 
-            async def callback(self, modal_interaction: nextcord.Interaction):
-                # create ticket channel
-                guild = modal_interaction.guild
-                category = guild.get_channel(panel.get("category"))
-                if category is None:
-                    return await modal_interaction.response.send_message("❌ Catégorie du panel invalide.", ephemeral=True)
+        thread_id = await self._create_log_thread(chan)
+        TICKET_DATA[str(chan.id)] = {"thread_id": thread_id, "owner": ctx.author.id}
+        save_data(TICKET_DATA)
 
-                # increment counter
-                CONFIG["counter"] = CONFIG.get("counter", 0) + 1
-                save_config(CONFIG)
-                name = f"ticket-{CONFIG['counter']}"
-
-                overwrites = {guild.default_role: nextcord.PermissionOverwrite(read_messages=False)}
-                # owner
-                overwrites[modal_interaction.user] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
-                # managers
-                for rid in CONFIG.get("manager_roles", []):
-                    role = guild.get_role(rid)
-                    if role:
-                        overwrites[role] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
-
-                chan = await guild.create_text_channel(name, category=category, overwrites=overwrites)
-
-                # prepare embed with modal responses
-                desc = ""
-                for item in self.children:
-                    desc += f"**{item.label}**\n{item.value}\n\n"
-
-                embed = nextcord.Embed(title=panel.get("title", "Ticket ouvert"), description=panel.get("description", ""), color=0x95A5A6, timestamp=datetime.utcnow())
-                embed.add_field(name="Infos", value=desc, inline=False)
-                embed.set_footer(text=f"Ticket #{CONFIG['counter']}")
-
-                await chan.send(modal_interaction.user.mention, embed=embed)
-
-                # track ticket
-                thread_id = await Tickets._create_log_thread if False else None
-                TICKET_DATA[str(chan.id)] = {"thread_id": None, "owner": modal_interaction.user.id}
-                save_data(TICKET_DATA)
-
-                await modal_interaction.response.send_message(f"✅ Ticket créé : {chan.mention}", ephemeral=True)
-
-        await interaction.response.send_modal(TicketModal())
+        await ctx.send(
+            f"✅ Ticket créé : {chan.mention}")
