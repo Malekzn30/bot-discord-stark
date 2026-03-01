@@ -101,19 +101,38 @@ class Tickets(commands.Cog):
     # ---------------------------
     # commandes de configuration
     # ---------------------------
-    @commands.group(name="ticket", invoke_without_command=True)
+    @commands.hybrid_group(name="ticket", invoke_without_command=True, description="Ouvre un nouveau ticket (prefix only) – `/ticket setup` pour config")
     async def ticket(self, ctx):
-        """+ticket → ouvre un nouveau ticket"""
+        """+ticket → ouvre un nouveau ticket
+
+        Cette commande n'est **pas** utilisable en slash, sauf pour accéder à `/ticket setup`.
+        Si vous tapez `/ticket` dans Discord l’invite vous indiquera de passer par `+ticket`.
+        """
+        # disallow slash invocation without sous-commande
+        if isinstance(ctx, nextcord.ApplicationContext):
+            return await ctx.respond("❌ Utilisez `+ticket` pour ouvrir un ticket.", ephemeral=True)
+        # contrôle des rôles « access »
+        if CONFIG["access_roles"]:
+            if not any(r.id in CONFIG["access_roles"] for r in ctx.author.roles):
+                return await ctx.send("❌ Vous n'avez pas le rôle requis pour ouvrir un ticket.")
+        await self._open_ticket(ctx)
         # contrôle des rôles « access »
         if CONFIG["access_roles"]:
             if not any(r.id in CONFIG["access_roles"] for r in ctx.author.roles):
                 return await ctx.send("❌ Vous n'avez pas le rôle requis pour ouvrir un ticket.")
         await self._open_ticket(ctx)
 
-    @ticket.group(name="setup", invoke_without_command=True)
+    @commands.hybrid_group(name="setup", description="Voir/modifier la configuration des tickets", invoke_without_command=True)
     @commands.has_permissions(administrator=True)
     async def ticket_setup(self, ctx):
-        """sous‑commandes : category, logs, title, description"""
+        """Afficher ou modifier la configuration des tickets.
+
+        Sous-commandes :
+        category, logs, title, description,
+        addmanager, removemanager, adddeletor, removedeletor,
+        access_add, access_remove,
+        panel_add, panel_remove, panel_list
+        """
         embed = nextcord.Embed(
             title="📋 Configuration des tickets",
             color=0x3498db,
@@ -130,72 +149,126 @@ class Tickets(commands.Cog):
         await ctx.send(embed=embed)
 
     @ticket_setup.command(name="category")
+    @commands.hybrid_command(name="category", description="Configurer la catégorie de tickets")
     @commands.has_permissions(administrator=True)
     async def setup_category(self, ctx, category: nextcord.CategoryChannel):
+        """Définit la **catégorie** où les tickets seront créés.
+
+        Usage : `+ticket setup category <#catégorie>`
+        Exemple : `+ticket setup category #tickets`
+        """
         CONFIG["category"] = category.id
         save_config(CONFIG)
         await ctx.send(f"✅ Catégorie de tickets définie sur {category.mention}.")
 
     @ticket_setup.command(name="logs")
+    @commands.hybrid_command(name="logs", description="Configurer le salon de logs des tickets")
     @commands.has_permissions(administrator=True)
     async def setup_logs(self, ctx, channel: nextcord.TextChannel):
+        """Spécifie le **salon de logs** où les événements de tickets seront notés.
+
+        Usage : `+ticket setup logs <#salon>`
+        Exemple : `+ticket setup logs #logs-tickets`
+        """
         CONFIG["log_channel"] = channel.id
         save_config(CONFIG)
         await ctx.send(f"✅ Salon de logs défini sur {channel.mention}.")
 
     @ticket_setup.command(name="title")
+    @commands.hybrid_command(name="title", description="Modifier le titre de l'embed de ticket")
     @commands.has_permissions(administrator=True)
     async def setup_title(self, ctx, *, title: str):
+        """Change le **titre** de l'embed envoyé dans chaque nouveau ticket.
+
+        Usage : `+ticket setup title <texte>`
+        Exemple : `+ticket setup title "🎫 Assistance"`
+        """
         CONFIG["embed_title"] = title
         save_config(CONFIG)
         await ctx.send("✅ Titre de l'embed modifié.")
 
     @ticket_setup.command(name="description")
+    @commands.hybrid_command(name="description", description="Modifier la description de l'embed de ticket")
     @commands.has_permissions(administrator=True)
     async def setup_description(self, ctx, *, desc: str):
+        """Modifie la **description** de l'embed initial d'un ticket.
+
+        Usage : `+ticket setup description <texte>`
+        Exemple : `+ticket setup description "Expliquez votre problème ci-dessous."`
+        """
         CONFIG["embed_description"] = desc
         save_config(CONFIG)
         await ctx.send("✅ Description de l'embed modifiée.")
 
-    @ticket_setup.command(name="addmanager")
+    @ticket_setup.command(name="addmanager", aliases=["add_manager","manager_add","add-manager"])
+    @commands.hybrid_command(name="addmanager", description="Ajouter un rôle gestionnaire")
     @commands.has_permissions(administrator=True)
     async def add_manager(self, ctx, role: nextcord.Role):
+        """Ajoute un rôle à la liste des **gestionnaires** (peuvent voir/fermer/claim).
+
+        Usage : `+ticket setup addmanager <@rôle>`
+        Exemple : `+ticket setup addmanager @Modérateur`
+        """
         if role.id in CONFIG["manager_roles"]:
             return await ctx.send("✅ Ce rôle est déjà gestionnaire.")
         CONFIG["manager_roles"].append(role.id)
         save_config(CONFIG)
         await ctx.send(f"✅ {role.mention} peut maintenant voir/fermer/claim des tickets.")
 
-    @ticket_setup.command(name="removemanager")
+    @ticket_setup.command(name="removemanager", aliases=["remove_manager","manager_remove","remove-manager"])
+    @commands.hybrid_command(name="removemanager", description="Retirer un rôle gestionnaire")
     @commands.has_permissions(administrator=True)
     async def remove_manager(self, ctx, role: nextcord.Role):
+        """Retire un rôle de la liste des gestionnaires.
+
+        Usage : `+ticket setup removemanager <@rôle>`
+        Exemple : `+ticket setup removemanager @Modérateur`
+        """
         if role.id not in CONFIG["manager_roles"]:
             return await ctx.send("❌ Ce rôle n'est pas gestionnaire.")
         CONFIG["manager_roles"].remove(role.id)
         save_config(CONFIG)
         await ctx.send(f"✅ {role.mention} n'est plus gestionnaire.")
 
-    @ticket_setup.command(name="adddeletor")
+    @ticket_setup.command(name="adddeletor", aliases=["add_deletor","deletor_add","add-deletor"])
+    @commands.hybrid_command(name="adddeletor", description="Ajouter un rôle autorisé à supprimer des tickets")
     @commands.has_permissions(administrator=True)
     async def add_deletor(self, ctx, role: nextcord.Role):
+        """Ajoute un rôle autorisé à **supprimer** des tickets.
+
+        Usage : `+ticket setup adddeletor <@rôle>`
+        Exemple : `+ticket setup adddeletor @Admin`
+        """
         if role.id in CONFIG["deletor_roles"]:
             return await ctx.send("✅ Ce rôle peut déjà supprimer des tickets.")
         CONFIG["deletor_roles"].append(role.id)
         save_config(CONFIG)
         await ctx.send(f"✅ {role.mention} peut maintenant supprimer des tickets.")
 
-    @ticket_setup.command(name="removedeletor")
+    @ticket_setup.command(name="removedeletor", aliases=["remove_deletor","deletor_remove","remove-deletor"])
+    @commands.hybrid_command(name="removedeletor", description="Retirer un rôle autorisé à supprimer des tickets")
     @commands.has_permissions(administrator=True)
     async def remove_deletor(self, ctx, role: nextcord.Role):
+        """Retire un rôle de la liste des rôles autorisés à supprimer des tickets.
+
+        Usage : `+ticket setup removedeletor <@rôle>`
+        Exemple : `+ticket setup removedeletor @Admin`
+        """
         if role.id not in CONFIG["deletor_roles"]:
             return await ctx.send("❌ Ce rôle ne peut pas supprimer de tickets.")
         CONFIG["deletor_roles"].remove(role.id)
         save_config(CONFIG)
         await ctx.send(f"✅ {role.mention} ne peut plus supprimer de tickets.")
 
-    @ticket_setup.command(name="access_add")
+    @ticket_setup.command(name="access_add", aliases=["addaccess","access-add","add_access"])
+    @commands.hybrid_command(name="access_add", description="Donner l'accès aux tickets à un rôle")
     @commands.has_permissions(administrator=True)
     async def access_add(self, ctx, role: nextcord.Role):
+        """Donne à un rôle **l'accès** pour ouvrir des tickets (par défaut tout le monde).
+
+        Usage : `+ticket setup access_add <@rôle>`
+        Exemple : `+ticket setup access_add @Membre`
+        """
         if role.id in CONFIG["access_roles"]:
             return await ctx.send("✅ Ce rôle a déjà accès aux tickets.")
         CONFIG["access_roles"].append(role.id)
@@ -203,6 +276,7 @@ class Tickets(commands.Cog):
         await ctx.send(f"✅ {role.mention} peut maintenant ouvrir des tickets.")
 
     @ticket_setup.command(name="panel_add")
+    @commands.hybrid_command(name="panel_add", description="Créer un panel de ticket")
     @commands.has_permissions(administrator=True)
     async def panel_add(self, ctx, channel: nextcord.TextChannel, category: nextcord.CategoryChannel, *, title: str = "🎫 Ticket", description: str = "Cliquez pour ouvrir un ticket."):
         """Créer un panel de ticket minimal et l'envoyer dans <channel>."""
@@ -231,6 +305,7 @@ class Tickets(commands.Cog):
         await ctx.send(f"✅ Panel créé et envoyé (id: {pid}) dans {channel.mention}.")
 
     @ticket_setup.command(name="panel_remove")
+    @commands.hybrid_command(name="panel_remove", description="Supprimer un panel de ticket")
     @commands.has_permissions(administrator=True)
     async def panel_remove(self, ctx, panel_id: str):
         if panel_id not in PANELS:
@@ -240,6 +315,7 @@ class Tickets(commands.Cog):
         await ctx.send(f"✅ Panel {panel_id} supprimé.")
 
     @ticket_setup.command(name="panel_list")
+    @commands.hybrid_command(name="panel_list", description="Lister les panels de ticket")
     @commands.has_permissions(administrator=True)
     async def panel_list(self, ctx):
         if not PANELS:
@@ -251,9 +327,15 @@ class Tickets(commands.Cog):
             desc += f"• {pid} — channel: {ch.mention if ch else p.get('channel_id')} — category: {cat.name if cat else p.get('category')} — title: {p.get('title')}\n"
         await ctx.send(embed=nextcord.Embed(title="Panels", description=desc, color=0x3498db))
 
-    @ticket_setup.command(name="access_remove")
+    @ticket_setup.command(name="access_remove", aliases=["removeaccess","access-remove","remove_access"])
+    @commands.hybrid_command(name="access_remove", description="Retirer l'accès aux tickets d'un rôle")
     @commands.has_permissions(administrator=True)
     async def access_remove(self, ctx, role: nextcord.Role):
+        """Retire l'accès d'un rôle pour l'ouverture de tickets.
+
+        Usage : `+ticket setup access_remove <@rôle>`
+        Exemple : `+ticket setup access_remove @Visiteur`
+        """
         if role.id not in CONFIG["access_roles"]:
             return await ctx.send("❌ Ce rôle n'avait pas accès aux tickets.")
         CONFIG["access_roles"].remove(role.id)
@@ -264,6 +346,7 @@ class Tickets(commands.Cog):
     # actions dans un ticket
     # ---------------------------
     @ticket.command(name="claim")
+    @commands.hybrid_command(name="claim", description="Réclamer le ticket courant", with_app_command=False)
     async def ticket_claim(self, ctx):
         if str(ctx.channel.id) not in TICKET_DATA:
             return await ctx.send("❌ Cette commande ne fonctionne que dans un ticket.")
@@ -274,6 +357,7 @@ class Tickets(commands.Cog):
         await self._log_event(ctx.channel.id, "✋ Ticket réclamé", f"Réclamé par {ctx.author}")
 
     @ticket.command(name="close")
+    @commands.hybrid_command(name="close", description="Fermer le ticket courant", with_app_command=False)
     async def ticket_close(self, ctx, *, reason: str = None):
         cid = str(ctx.channel.id)
         if cid not in TICKET_DATA:
@@ -289,6 +373,7 @@ class Tickets(commands.Cog):
         await ctx.send("🔒 Ticket fermé. Le canal restera ouvert.")
     
     @ticket.command(name="delete")
+    @commands.hybrid_command(name="delete", description="Supprimer le ticket courant", with_app_command=False)
     async def ticket_delete(self, ctx):
         cid = str(ctx.channel.id)
         if cid not in TICKET_DATA:

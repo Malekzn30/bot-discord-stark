@@ -29,6 +29,12 @@ bot.start_time = time.time()
 async def on_ready():
     print(f"Bot prêt : {bot.user}")
     cleanup_aggressive.start()
+    # enregistrer les commandes slash/app
+    try:
+        synced = await bot.tree.sync()
+        print(f"Commandes slash synchronisées : {len(synced)}")
+    except Exception as e:
+        print(f"Erreur lors de la synchronisation des commandes slash : {e}")
 
 @tasks.loop(minutes=10)
 async def cleanup_aggressive():

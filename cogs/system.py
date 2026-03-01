@@ -17,7 +17,7 @@ class System(commands.Cog):
             # --- aide générale ------------------------------------------------
             embed = nextcord.Embed(
                 title="📚 AIDE – Commandes disponibles",
-                description="Tapez `+help <commande>` pour obtenir des détails.",
+                description="Tapez `+help <commande>` pour obtenir des détails.\nSlash : seules les **sous-commandes de configuration de tickets** sont disponibles (utilisez `/ticket setup`).",
                 color=0x3498db
             )
 
@@ -133,18 +133,16 @@ class System(commands.Cog):
             embed.add_field(
                 name="🎫 Tickets",
                 value=(
-                    "`ticket` `ticket setup` `ticket setup category` "
-                    "`ticket setup logs` `ticket setup title` "
-                    "`ticket setup description` `ticket setup addmanager` "
-                    "`ticket setup removemanager` `ticket setup adddeletor` "
-                    "`ticket setup removedeletor` `ticket setup access_add` "
-                    "`ticket setup access_remove` `ticket claim` "
-                    "`ticket close` `ticket delete`"
+                    "`ticket` – ouvre un nouveau ticket (préfixe uniquement)."
+                    "\n`ticket setup` – voir/modifier la configuration (admin) (accessible aussi via `/ticket setup`)."
+                    "\nSous‑commandes : category, logs, title, description, addmanager, removemanager,"
+                    " adddeletor, removedeletor, access_add, access_remove, panel_add, panel_remove, panel_list."
+                    "\n`ticket claim` / `ticket close` / `ticket delete` pour gérer un ticket ouvert (préfixe uniquement)."
                 ),
                 inline=False
             )
 
-            embed.set_footer(text="Préfixe : +")
+            embed.set_footer(text="Préfixe : +  •  Hébergé sur Render : 512 MB RAM & 0.15 CPU – gardez les commandes légères")
             await ctx.send(embed=embed)
             return
 
@@ -221,27 +219,92 @@ class System(commands.Cog):
                 "exemple": "+uptime"
             },
             "ticket": {
-                "description": "Ouvrir un ticket. +ticket <sous‑commande> pour la configuration.",
+                "description": "Ouvrir un ticket (préfixe uniquement ; `/ticket` n'est pas utilisable).",
                 "usage": "+ticket",
                 "exemple": "+ticket"
             },
             "ticket setup": {
-                "description": "Voir/modifier la configuration des tickets (admin).",
+                "description": "Voir/modifier la configuration des tickets (admin). Disponible en slash `/ticket setup`.",
                 "usage": "+ticket setup",
                 "exemple": "+ticket setup"
             },
             "ticket claim": {
-                "description": "Réclamer un ticket (staff).",
+                "description": "Réclamer un ticket (staff). Usage en préfixe seulement (+ticket claim).",
                 "usage": "+ticket claim",
                 "exemple": "+ticket claim"
             },
+            "ticket setup category": {
+                "description": "Définit la catégorie où les tickets seront créés (admin).",
+                "usage": "+ticket setup category <#catégorie>",
+                "exemple": "+ticket setup category #tickets"
+            },
+            "ticket setup logs": {
+                "description": "Spécifie le salon de logs des tickets (admin).",
+                "usage": "+ticket setup logs <#salon>",
+                "exemple": "+ticket setup logs #logs-tickets"
+            },
+            "ticket setup title": {
+                "description": "Change le titre de l'embed des tickets (admin).",
+                "usage": "+ticket setup title <texte>",
+                "exemple": "+ticket setup title 🎫 Assistance"
+            },
+            "ticket setup description": {
+                "description": "Modifie la description de l'embed initial (admin).",
+                "usage": "+ticket setup description <texte>",
+                "exemple": "+ticket setup description Expliquez votre problème"
+            },
+            "ticket setup addmanager": {
+                "description": "Ajoute un rôle comme gestionnaire (admin). alias +ticket setup add-manager / add_manager",
+                "usage": "+ticket setup addmanager <@rôle>",
+                "exemple": "+ticket setup addmanager @Modérateur"
+            },
+            "ticket setup removemanager": {
+                "description": "Retire un rôle de la liste des gestionnaires (admin). alias +ticket setup remove-manager / remove_manager",
+                "usage": "+ticket setup removemanager <@rôle>",
+                "exemple": "+ticket setup removemanager @Modérateur"
+            },
+            "ticket setup adddeletor": {
+                "description": "Ajoute un rôle autorisé à supprimer des tickets (admin). alias +ticket setup add-deletor / add_deletor",
+                "usage": "+ticket setup adddeletor <@rôle>",
+                "exemple": "+ticket setup adddeletor @Admin"
+            },
+            "ticket setup removedeletor": {
+                "description": "Retire un rôle autorisé à supprimer des tickets (admin). alias +ticket setup remove-deletor / remove_deletor",
+                "usage": "+ticket setup removedeletor <@rôle>",
+                "exemple": "+ticket setup removedeletor @Admin"
+            },
+            "ticket setup access_add": {
+                "description": "Donne l'accès aux tickets à un rôle (admin). alias +ticket setup addaccess / access-add",
+                "usage": "+ticket setup access_add <@rôle>",
+                "exemple": "+ticket setup access_add @Membre"
+            },
+            "ticket setup access_remove": {
+                "description": "Retire l'accès aux tickets d'un rôle (admin). alias +ticket setup removeaccess / access-remove",
+                "usage": "+ticket setup access_remove <@rôle>",
+                "exemple": "+ticket setup access_remove @Visiteur"
+            },
+            "ticket setup panel_add": {
+                "description": "Crée un panel de ticket interactif dans un salon (admin).",
+                "usage": "+ticket setup panel_add <#salon> <#catégorie> [titre] [description]",
+                "exemple": "+ticket setup panel_add #accueil #tickets '🎫 Help' 'Cliquez pour ouvrir un ticket.'"
+            },
+            "ticket setup panel_remove": {
+                "description": "Supprime un panel précédemment créé (admin).",
+                "usage": "+ticket setup panel_remove <id_panel>",
+                "exemple": "+ticket setup panel_remove 1584123456789"
+            },
+            "ticket setup panel_list": {
+                "description": "Liste tous les panels de ticket configurés.",
+                "usage": "+ticket setup panel_list",
+                "exemple": "+ticket setup panel_list"
+            },
             "ticket close": {
-                "description": "Fermer le ticket courant.",
+                "description": "Fermer le ticket courant (préfixe uniquement).",
                 "usage": "+ticket close [raison]",
                 "exemple": "+ticket close Résolu"
             },
             "ticket delete": {
-                "description": "Supprimer un ticket (rôle autorisé).",
+                "description": "Supprimer un ticket (rôle autorisé, préfixe uniquement).",
                 "usage": "+ticket delete",
                 "exemple": "+ticket delete"
             },
