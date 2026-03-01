@@ -26,18 +26,12 @@ COGS_DIR = os.path.join(BASE_DIR, "cogs")
 
 # ============= COGS À CHARGER =============
 COGS_TO_LOAD = [
-    "cogs.tickets",
     "cogs.voice", 
     "cogs.moderation",
     "cogs.system",
     "cogs.logs",
     "cogs.games"
 ]
-
-# ============= CONFIGURATION TICKETS =============
-TICKETS_CONFIG_PATH = os.path.join(DATA_DIR, "tickets_config.json")
-TICKETS_DATA_PATH = os.path.join(DATA_DIR, "tickets_data.json")
-TICKETS_PANELS_PATH = os.path.join(DATA_DIR, "tickets_panels.json")
 
 # ============= CONFIGURATION VOICE =============
 VOICE_MOVE_COOLDOWN = 1.0  # Secondes entre chaque déplacement

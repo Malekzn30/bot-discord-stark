@@ -11,13 +11,13 @@ from config import TOKEN
 # DISCORD BOT - ULTRA OPTIMISÉ
 # ============================
 
-# Intents MINIMAUX pour économiser la RAM
+# Intents optimisés pour le bot
 intents = nextcord.Intents.default()
 intents.message_content = True
-intents.members = True   # ← NÉCESSAIRE pour les tickets
-intents.guilds = True   # ← NÉCESSAIRE pour les tickets
-intents.presences = False  # ← Pas de presences
-intents.typing = False  # ← Pas de typing
+intents.members = True   # Pour les commandes vocales
+intents.guilds = True   # Pour les commandes serveur
+intents.presences = False  # Pas de presences
+intents.typing = False  # Pas de typing
 
 bot = commands.Bot(
     command_prefix="+",
@@ -61,7 +61,7 @@ async def cleanup_aggressive():
         print(f"[GC] Erreur: {e}")
 
 def load_cogs():
-    cogs_to_load = ['moderation', 'system', 'voice', 'logs', 'games', 'tickets']
+    cogs_to_load = ['moderation', 'system', 'voice', 'logs', 'games']
     print(f"[DEBUG] Tentative de chargement des cogs: {cogs_to_load}")
     
     for cog in cogs_to_load:

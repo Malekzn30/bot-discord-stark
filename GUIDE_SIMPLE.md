@@ -9,20 +9,14 @@
 ├── 📋 requirements.txt      # Dépendances Python
 ├── 📄 Procfile           # Configuration Render
 ├── 📂 cogs/              # Modules du bot
-│   ├── 🎫 tickets.py      # Système de tickets
-│   ├── 🎤 voice.py        # Gestion vocale
+│   ├──  voice.py        # Gestion vocale
 │   ├── 🔨 moderation.py   # Modération
 │   ├── ⚙️ system.py       # Commandes système
 │   ├── 📝 logs.py         # Logs
 │   └── 🎮 games.py        # Jeux
 ├── 📂 data/              # Données
-│   ├── tickets_config.json  # Configuration tickets
-│   ├── tickets_data.json    # Données tickets
-│   └── tickets_panels.json  # Panels de tickets
-├── 📂 guides/            # Guides utilisateurs
-│   ├── TICKETS_GUIDE.md   # Guide complet tickets
-│   └── VOICE_GUIDE.md     # Guide commandes vocales
-└── 📂 docs/              # Documentation technique
+└── 📂 guides/            # Guides utilisateurs
+    └── VOICE_GUIDE.md     # Guide commandes vocales
 ```
 
 ## 🚀 Démarrage rapide
@@ -41,12 +35,7 @@
    python bot.py
    ```
 
-## 🎫 Commandes principales
-
-### Tickets
-- `+ticket` - Voir les panels et créer des tickets
-- `+ticket setup` - Configuration des tickets
-- `+ticket setup panel_add #salon "Titre"` - Créer un panel
+## � Commandes principales
 
 ### Vocal
 - `+moove @user #salon` - Déplacer un membre
@@ -59,6 +48,17 @@
 - `+devinelenombre 1 100 #salon` - Jeu de devinette
 - `+jeuxencours` - Voir les jeux en cours
 
+### Modération
+- `+kick @user` - Expulser un membre
+- `+ban @user` - Bannir un membre
+- `+mute @user` - Rendre muet
+- `+warn @user "raison"` - Avertir
+
+### Système
+- `+botinfo` - Informations du bot
+- `+serverinfo` - Informations du serveur
+- `+restart` - Redémarrer le bot
+
 ## 🔧 Configuration
 
 Dans `config.py` tu peux modifier :
@@ -68,7 +68,6 @@ Dans `config.py` tu peux modifier :
 
 ## 📚 Documentation complète
 
-- `guides/TICKETS_GUIDE.md` - Guide détaillé des tickets
 - `guides/VOICE_GUIDE.md` - Guide complet des commandes vocales
 
 ---
