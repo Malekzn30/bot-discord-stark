@@ -45,6 +45,7 @@ class CategorySelect(ui.Select):
             nextcord.SelectOption(label="🎙️ Vocal", description="Commandes vocales"),
             nextcord.SelectOption(label="🛡️ Modération", description="Commandes de modération"),
             nextcord.SelectOption(label="📊 Système", description="Commandes système"),
+            nextcord.SelectOption(label="🎮 Jeux", description="Commandes de jeux"),
         ]
 
         super().__init__(
@@ -187,8 +188,15 @@ class CategorySelect(ui.Select):
             "📊 Système": {
                 "help": "Affiche ce menu d’aide.",
                 "stat": "Affiche les statistiques du bot."
+            },  # <-- added comma here
+    
+            # ============================================================
+            # JEUX
+            # ============================================================
+            "🎮 Jeux": {
+                "devinelenombre": "Lance un jeu de devinette dans un salon vocal."
             }
-        }
+            }
 
         # ============================================================
         # CRÉATION DES PAGES
