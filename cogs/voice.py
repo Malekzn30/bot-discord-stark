@@ -46,11 +46,18 @@ class Voice(commands.Cog):
         if not member.voice:
             return await ctx.send(embed=embed_msg("❌ Erreur", "Ce membre n'est pas en vocal.", 0xff0000))
 
-        old = member.voice.channel
-        await member.move_to(channel)
-        last_moves[member.id] = old.id
+        # Vérifier les permissions du bot
+        if not channel.permissions_for(ctx.guild.me).move_members:
+            return await ctx.send(embed=embed_msg("❌ Permissions", "Le bot ne peut pas déplacer les membres dans ce salon.", 0xff0000))
 
-        await ctx.send(embed=embed_msg("🚚 Déplacé", f"{member.mention} → {format_channel(channel)}"))
+        try:
+            old = member.voice.channel
+            await member.move_to(channel)
+            last_moves[member.id] = old.id
+            await ctx.send(embed=embed_msg("🚚 Déplacé", f"{member.mention} → {format_channel(channel)}"))
+        except Exception as e:
+            await ctx.send(embed=embed_msg("❌ Erreur", f"Impossible de déplacer {member.mention}: {str(e)}", 0xff0000))
+            print(f"❌ Erreur déplacement {member.display_name}: {e}")
 
     # ============================================================
     # 2) MOOVE PLUSIEURS PERSONNES → 1 SALON
@@ -70,15 +77,42 @@ class Voice(commands.Cog):
         if not mentions:
             return await ctx.send(embed=embed_msg("❌ Aucun membre", "Mentionne au moins 1 membre.", 0xff0000))
 
+        # Vérifier les permissions du bot
+        if not channel.permissions_for(ctx.guild.me).move_members:
+            return await ctx.send(embed=embed_msg("❌ Permissions", "Le bot ne peut pas déplacer les membres dans ce salon.", 0xff0000))
+
         moved = 0
-        for m in mentions:
-            if m.voice:
+        failed = 0
+        
+        # Message de départ
+        msg = await ctx.send(embed=embed_msg("🚚 Déplacement en cours", f"Déplacement de {len(mentions)} membres..."))
+        
+        for i, m in enumerate(mentions):
+            try:
+                # Vérifier que le membre est en vocal
+                if not m.voice or not m.voice.channel:
+                    failed += 1
+                    continue
+                    
                 old = m.voice.channel
                 await m.move_to(channel)
                 last_moves[m.id] = old.id
                 moved += 1
+                
+                # Petit délai pour éviter le rate limiting
+                if i < len(mentions) - 1:
+                    await asyncio.sleep(0.3)
+                    
+            except Exception as e:
+                failed += 1
+                print(f"❌ Erreur déplacement {m.display_name}: {e}")
+                continue
 
-        await ctx.send(embed=embed_msg("🚚 Déplacement effectué", f"{moved} membres → {format_channel(channel)}"))
+        # Mettre à jour le message
+        await msg.edit(embed=embed_msg(
+            "🚚 Déplacement terminé", 
+            f"✅ {moved} membres déplacés\n❌ {failed} échecs\n📍 {format_channel(channel)}"
+        ))
 
     # ============================================================
     # 3) MOOVE 1 PERSONNE → RANDOM CATÉGORIE
@@ -146,14 +180,43 @@ class Voice(commands.Cog):
         if not channel:
             return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+mooveall #salon`", 0xff0000))
 
-        moved = 0
-        for m in ctx.author.voice.channel.members:
-            old = m.voice.channel
-            await m.move_to(channel)
-            last_moves[m.id] = old.id
-            moved += 1
+        # Vérifier que le bot a les permissions
+        if not channel.permissions_for(ctx.guild.me).move_members:
+            return await ctx.send(embed=embed_msg("❌ Permissions", "Le bot ne peut pas déplacer les membres dans ce salon.", 0xff0000))
 
-        await ctx.send(embed=embed_msg("🚚 Déplacement effectué", f"{moved} membres → {format_channel(channel)}"))
+        moved = 0
+        failed = 0
+        members = list(ctx.author.voice.channel.members)
+        
+        # Message de départ
+        msg = await ctx.send(embed=embed_msg("🚚 Déplacement en cours", f"Déplacement de {len(members)} membres..."))
+        
+        for i, m in enumerate(members):
+            try:
+                # Vérifier que le membre est toujours en vocal
+                if not m.voice or not m.voice.channel:
+                    failed += 1
+                    continue
+                    
+                old = m.voice.channel
+                await m.move_to(channel)
+                last_moves[m.id] = old.id
+                moved += 1
+                
+                # Petit délai pour éviter le rate limiting
+                if i < len(members) - 1:  # Pas de délai pour le dernier
+                    await asyncio.sleep(0.3)
+                    
+            except Exception as e:
+                failed += 1
+                print(f"❌ Erreur déplacement {m.display_name}: {e}")
+                continue
+        
+        # Mettre à jour le message
+        await msg.edit(embed=embed_msg(
+            "🚚 Déplacement terminé", 
+            f"✅ {moved} membres déplacés\n❌ {failed} échecs\n📍 {format_channel(channel)}"
+        ))
 
     # ============================================================
     # 6) MOOVE TOUTE LA VOCAL → RANDOM CATÉGORIE
@@ -191,15 +254,48 @@ class Voice(commands.Cog):
         if not channel:
             return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+mooveserver #salon`", 0xff0000))
 
+        # Vérifier les permissions du bot
+        if not channel.permissions_for(ctx.guild.me).move_members:
+            return await ctx.send(embed=embed_msg("❌ Permissions", "Le bot ne peut pas déplacer les membres dans ce salon.", 0xff0000))
+
+        # Récupérer tous les membres en vocal
+        voice_members = [m for m in ctx.guild.members if m.voice and m.voice.channel]
+        
+        if not voice_members:
+            return await ctx.send(embed=embed_msg("❌ Aucun membre", "Aucun membre n'est en vocal sur le serveur.", 0xff0000))
+
         moved = 0
-        for m in ctx.guild.members:
-            if m.voice and m.voice.channel:
+        failed = 0
+        
+        # Message de départ
+        msg = await ctx.send(embed=embed_msg("🌐 Déplacement serveur en cours", f"Déplacement de {len(voice_members)} membres..."))
+        
+        for i, m in enumerate(voice_members):
+            try:
+                # Vérifier que le membre est toujours en vocal
+                if not m.voice or not m.voice.channel:
+                    failed += 1
+                    continue
+                    
                 old = m.voice.channel
                 await m.move_to(channel)
                 last_moves[m.id] = old.id
                 moved += 1
-
-        await ctx.send(embed=embed_msg("🌐 Moove serveur", f"{moved} membres déplacés → {format_channel(channel)}"))
+                
+                # Délai plus long pour le serveur entier
+                if i < len(voice_members) - 1:
+                    await asyncio.sleep(0.5)
+                    
+            except Exception as e:
+                failed += 1
+                print(f"❌ Erreur déplacement serveur {m.display_name}: {e}")
+                continue
+        
+        # Mettre à jour le message
+        await msg.edit(embed=embed_msg(
+            "🌐 Déplacement serveur terminé", 
+            f"✅ {moved} membres déplacés\n❌ {failed} échecs\n📍 {format_channel(channel)}"
+        ))
 
     # ============================================================
     # 8) BACK
