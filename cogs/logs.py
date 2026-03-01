@@ -2,25 +2,17 @@ import nextcord
 from nextcord.ext import commands
 from datetime import datetime
 
-# ============================
-# Mémoire RAM : aucun stockage
-# ============================
-
 LOG_CHANNELS = {
     "warn": None,
     "commands": None,
     "moderation": None
 }
 
-# ============================
-# Envoi d’un log
-# ============================
-
 async def send_log(bot, log_type: str, message: str, ctx=None):
     channel_id = LOG_CHANNELS.get(log_type)
 
     if not channel_id:
-        return  # aucun salon configuré
+        return
 
     log_channel = bot.get_channel(channel_id)
     if not log_channel:
@@ -42,10 +34,6 @@ async def send_log(bot, log_type: str, message: str, ctx=None):
 
     await log_channel.send(embed=embed)
 
-# ============================
-# Cog de configuration
-# ============================
-
 class Logs(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -64,14 +52,12 @@ class Logs(commands.Cog):
         def check(m):
             return m.author == ctx.author and m.channel == ctx.channel
 
-        # 1) Choix du type
         msg_type = await self.bot.wait_for("message", check=check)
         log_type = msg_type.content.lower()
 
         if log_type not in LOG_CHANNELS:
             return await ctx.send("❌ Type invalide.")
 
-        # 2) Choix du salon
         await ctx.send("Mentionne le salon pour ce type de log.")
 
         msg_channel = await self.bot.wait_for("message", check=check)
@@ -81,14 +67,22 @@ class Logs(commands.Cog):
 
         channel = msg_channel.channel_mentions[0]
 
-        # 3) Sauvegarde en RAM
         LOG_CHANNELS[log_type] = channel.id
 
         await ctx.send(f"✔️ Log `{log_type}` configuré dans {channel.mention} !")
 
-# ============================
-# Setup du cog
-# ============================
+    # 🔥 AUTO-LOG DES COMMANDES VALIDES
+    @commands.Cog.listener()
+    async def on_command(self, ctx):
+        if ctx.command is None:
+            return  # ignore les commandes invalides
+
+        await send_log(
+            self.bot,
+            "commands",
+            f"{ctx.author} a utilisé : {ctx.command}",
+            ctx
+        )
 
 def setup(bot):
     bot.add_cog(Logs(bot))

@@ -4,6 +4,8 @@ import sqlite3
 from datetime import timedelta
 import asyncio
 
+from cogs.logs import send_log   # ← AJOUT OBLIGATOIRE
+
 class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -219,10 +221,19 @@ class Moderation(commands.Cog):
         if not member:
             return await ctx.send("❌ Utilise : `+warn @membre [raison]`")
 
+        # Enregistrement dans la base SQLite
         self.cursor.execute("INSERT INTO warns (user_id, reason) VALUES (?, ?)", (member.id, reason))
         self.db.commit()
 
         await ctx.send(f"⚠️ {member.mention} averti.\n📄 Raison : {reason}")
+
+        # 🔥 LOG AUTOMATIQUE
+        await send_log(
+            self.bot,
+            "warn",
+            f"{ctx.author} a warn {member} pour : {reason}",
+            ctx
+        )
 
     @commands.command(name="warnlist")
     async def warnlist(self, ctx, member: nextcord.Member = None):
@@ -265,6 +276,7 @@ class Moderation(commands.Cog):
         self.db.commit()
 
         await ctx.send(f"🧼 Tous les warns de {member.mention} ont été supprimés.")
+
 
     # ============================================================
     # LOCK / UNLOCK
