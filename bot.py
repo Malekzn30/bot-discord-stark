@@ -32,6 +32,20 @@ async def on_ready():
     print(f"Bot prêt : {bot.user}")
     cleanup_aggressive.start()
 
+@bot.event
+async def on_command_error(ctx, error):
+    """Capturer les erreurs de commandes"""
+    print(f"[ERREUR COMMANDE] {ctx.command} - {error}")
+    
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Permissions manquantes ! Tu dois être administrateur pour utiliser cette commande.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"❌ Argument manquant : {error}")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send(f"❌ Argument invalide : {error}")
+    else:
+        await ctx.send(f"❌ Erreur : {error}")
+
 @tasks.loop(minutes=10)
 async def cleanup_aggressive():
     """Nettoyage agressif de la mémoire toutes les 10 min."""
@@ -48,12 +62,16 @@ async def cleanup_aggressive():
 
 def load_cogs():
     cogs_to_load = ['moderation', 'system', 'voice', 'logs', 'games', 'tickets']
+    print(f"[DEBUG] Tentative de chargement des cogs: {cogs_to_load}")
+    
     for cog in cogs_to_load:
         try:
             bot.load_extension(f"cogs.{cog}")
             print(f"[+] Cog chargé : {cog}")
         except Exception as e:
             print(f"[!] Erreur chargement {cog}: {e}")
+            import traceback
+            traceback.print_exc()
 
 # ============================
 # FAKE FLASK SERVER (pour Render)

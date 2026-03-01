@@ -7,9 +7,13 @@ from datetime import datetime
 from typing import List, Dict, Any
 from nextcord import ui
 from nextcord.ui import Modal, TextInput
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from paths import TICKETS_CONFIG_PATH, TICKETS_DATA_PATH, TICKETS_PANELS_PATH
+
+# Chemins directs des fichiers
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+TICKETS_CONFIG_PATH = os.path.join(DATA_DIR, "tickets_config.json")
+TICKETS_DATA_PATH = os.path.join(DATA_DIR, "tickets_data.json")
+TICKETS_PANELS_PATH = os.path.join(DATA_DIR, "tickets_panels.json")
 
 CONFIG_PATH = TICKETS_CONFIG_PATH
 DATA_PATH = TICKETS_DATA_PATH

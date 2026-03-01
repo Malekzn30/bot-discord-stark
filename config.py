@@ -85,15 +85,9 @@ def validate_config():
         print("\n".join(errors))
         return False
     
-    print("✅ Configuration validée")
-    return True
-
-# ============= INITIALISATION =============
-ensure_directories()
-validate_config()
-
-print("🚀 Configuration du StarK92 Bot chargée")
-print(f"📁 Dossier principal : {BASE_DIR}")
-print(f"🎯 Version : {BOT_VERSION}")
-print(f"🔑 Rôle autorisé : {AUTHORIZED_ROLE_ID}")
+    print("Configuration des chemins chargee")
+print(f"Dossier data : {DATA_DIR}")
+print(f"Dossier guides : {GUIDES_DIR}")
+print(f"Dossier docs : {DOCS_DIR}")
+print(f"Dossier cogs : {COGS_DIR}")
 
