@@ -58,6 +58,7 @@
 - `+botinfo` - Informations du bot
 - `+serverinfo` - Informations du serveur
 - `+restart` - Redémarrer le bot
+- `+embed "Titre" "Description" "Footer"` - Créer un embed personnalisé
 
 ## 🔧 Configuration
 

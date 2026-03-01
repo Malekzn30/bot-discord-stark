@@ -474,5 +474,36 @@ class System(commands.Cog):
         save_command_roles(cfg)
         await ctx.send(f"✅ {role.mention} retiré pour la commande `{command_name}`.")
 
+    @commands.command(name="embed")
+    @commands.has_permissions(administrator=True)
+    async def create_embed(self, ctx, title: str, description: str, *, footer: str = None):
+        """Créer un embed personnalisé avec icône du serveur et footer du bot
+        
+        Usage: +embed "Titre" "Description" "Footer optionnel"
+        """
+        # Créer l'embed avec l'icône du serveur
+        embed = nextcord.Embed(
+            title=title,
+            description=description,
+            color=0x3498db,
+            timestamp=ctx.message.created_at
+        )
+        
+        # Ajouter l'icône du serveur si disponible
+        if ctx.guild.icon:
+            embed.set_thumbnail(url=ctx.guild.icon.url)
+        
+        # Ajouter le footer avec le nom du bot
+        if footer:
+            embed.set_footer(text=f"{footer} • {ctx.bot.user.name}", icon_url=ctx.bot.user.display_avatar.url)
+        else:
+            embed.set_footer(text=f"{ctx.bot.user.name}", icon_url=ctx.bot.user.display_avatar.url)
+        
+        # Ajouter l'auteur du message
+        embed.set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar.url)
+        
+        await ctx.send(embed=embed)
+        await ctx.message.delete()  # Supprimer la commande d'origine
+
 def setup(bot):
     bot.add_cog(System(bot))
