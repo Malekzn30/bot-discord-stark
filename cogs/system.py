@@ -3,6 +3,92 @@ from nextcord.ext import commands
 import time
 from cogs.moderation import COMMAND_ROLES, save_command_roles
 
+# interactive help content ---------------------------------------------------
+HELP_CATEGORIES = {
+    "🛡️ Modération": (
+        "`warn` `kick` `ban` `unban` `tempban` `softban` `mute` `unmute` "
+        "`timeout` `untimeout` `clear` `clearuser` `lock` `unlock` "
+        "`slowmode` `slowmode_disable` `massunmute` `warn_check` "
+        "`bulkdelete` `clearbots` `clearembeds` `masskick` `massban` "
+        "`warnlist` `unwarn` `clearwarns`") ,
+    "ℹ️ Infos": "`serverinfo` `userinfo` `ping` `uptime` `botinfo` `stats` `roles` `channels` `members_top` `avatar`,",
+    "📊 Logs": "`logs_setup` `logs_reset` `logs_status` `logs_clear` `logs_list_categories`",
+    "🛠️ Permissions": "`addrole` `removerole`",
+    "🎮 Jeux": "`dice` `coin` `rps` `trivia` `devinelenombre` `higher_lower` `slots` `rock_paper_scissors`",
+    "🎙️ Vocal": (
+        "`moove` `mooveusers` `mooverandom` `mooverandomusers` `mooveall` `mooveallrandom` "
+        "`mooveserver` `back` `moveserver_single` `moveall_category` `movecat_rebalance` "
+        "`move_category_to_category` `voicekick` `rebalance_category` `rebalanceserver` "
+        "`autobalance` `autosplit` `autosort` `rotateusers` `rotateall` `rotaterandom` "
+        "`rotategroups` `smartbalance` `moveserver_rebalance` `shuffle` `shufflestop` "
+        "`spin` `spinall` `randomtp` `nukevoice` `nukecategory` `nukerandom` "
+        "`nukeshuffle` `clearvoice` `clearcategory` `randomteams` `randomsplit` "
+        "`randompair` `randomassign` `randomkickvoice` `russianroulette` `solo_channels` "
+        "`lockvoice` `unlockvoice` `muteall` `unmuteall` `deafenall` `undeafenall` "
+        "`voice_mute_all_server` `voice_unmute_all_server` `voice_deafen_all_server` "
+        "`voicestats` `movelog` `whoisvoice` `listvoice` `joinme` `join` `leave` "
+        "`voiceinfo` `voice_limit` `voice_bitrate`"),
+    "🎙️ Divers": "(aucune pour l'instant)",
+    "🎫 Tickets": (
+        "`ticket` `ticket setup` `ticket setup wizard` `ticket setup category` "
+        "`ticket setup logs` `ticket setup title` `ticket setup description` "
+        "`ticket setup addmanager` `ticket setup removemanager` "
+        "`ticket setup adddeletor` `ticket setup removedeletor` "
+        "`ticket setup access_add` `ticket setup access_remove` "
+        "`ticket setup panel_add` `ticket setup panel_remove` `ticket setup panel_list` "
+        "`ticket claim` `ticket close` `ticket delete`" )
+}
+
+
+def create_main_help_embed():
+    embed = nextcord.Embed(
+        title="📚 AIDE – Commandes disponibles",
+        description="Cliquez sur l'un des boutons ci-dessous pour voir les commandes de chaque catégorie.",
+        color=0x3498db
+    )
+    return embed
+
+
+def create_category_embed(label: str):
+    desc = HELP_CATEGORIES.get(label, "")
+    embed = nextcord.Embed(title=f"📖 {label}", description=desc, color=0x3498db)
+    embed.set_footer(text="⬅️ Appuyez sur Retour pour revenir à la liste des catégories.")
+    return embed
+
+
+class HelpButton(nextcord.ui.Button):
+    def __init__(self, label: str):
+        super().__init__(label=label, style=nextcord.ButtonStyle.secondary)
+        self.label = label
+
+    async def callback(self, interaction: nextcord.Interaction):
+        embed = create_category_embed(self.label)
+        view = BackView()
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class BackButton(nextcord.ui.Button):
+    def __init__(self):
+        super().__init__(label="⬅️ Retour", style=nextcord.ButtonStyle.primary)
+
+    async def callback(self, interaction: nextcord.Interaction):
+        embed = create_main_help_embed()
+        view = HelpView()
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class HelpView(nextcord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        for label in HELP_CATEGORIES.keys():
+            self.add_item(HelpButton(label))
+
+
+class BackView(nextcord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(BackButton())
+
 class System(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -14,136 +100,10 @@ class System(commands.Cog):
         +help <commande> → détails sur la commande (1 seul embed)
         """
         if command is None:
-            # --- aide générale ------------------------------------------------
-            embed = nextcord.Embed(
-                title="📚 AIDE – Commandes disponibles",
-                description="Tapez `+help <commande>` pour obtenir des détails.\nSlash : seules les **sous-commandes de configuration de tickets** sont disponibles (utilisez `/ticket setup`).",
-                color=0x3498db
-            )
-
-            embed.add_field(
-                name="🛡️ Modération",
-                value=(
-                    "`warn` `kick` `ban` `unban` `tempban` `softban` `mute` "
-                    "`unmute` `timeout` `untimeout` `clear` `clearuser` "
-                    "`lock` `unlock` `slowmode` `slowmode_disable` `massunmute` "
-                    "`warn_check` `bulkdelete` `clearbots` `clearembeds` "
-                    "`masskick` `massban` `warnlist` `unwarn` `clearwarns`"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
-                name="ℹ️ Infos",
-                value="`serverinfo` `userinfo` `ping` `uptime` `botinfo` `stats` `roles` `channels` `members_top` `avatar`",
-                inline=False
-            )
-
-            embed.add_field(
-                name="📊 Logs",
-                value="`logs_setup` `logs_reset` `logs_status` `logs_clear` `logs_list_categories`",
-                inline=False
-            )
-
-            embed.add_field(
-                name="🛠️ Permissions",
-                value="`addrole` `removerole`",
-                inline=False
-            )
-
-            embed.add_field(
-                name="🎮 Jeux",
-                value=(
-                    "`dice` `coin` `rps` `trivia` `devinelenombre` "
-                    "`higher_lower` `slots` `rock_paper_scissors`"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
-                name="🎙️ Vocal – Déplacements",
-                value=(
-                    "`moove` `mooveusers` `mooverandom` `mooverandomusers` "
-                    "`mooveall` `mooveallrandom` `mooveserver` `back` "
-                    "`moveserver_single` `moveall_category` `movecat_rebalance` "
-                    "`move_category_to_category` `voicekick`"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
-                name="🎙️ Vocal – Rééquilibrage",
-                value=(
-                    "`rebalance_category` `rebalanceserver` `autobalance` `autosplit` `autosort` "
-                    "`rotateusers` `rotateall` `rotaterandom` `rotategroups` `smartbalance` `moveserver_rebalance`"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
-                name="🎙️ Vocal – Shuffle & Nuke",
-                value=(
-                    "`shuffle` `shufflestop` `spin` `spinall` `randomtp` `nukevoice` "
-                    "`nukecategory` `nukerandom` `nukeshuffle` `clearvoice` `clearcategory`"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
-                name="🎙️ Vocal – Teams & Pairs",
-                value=(
-                    "`randomteams` `randomsplit` `randompair` `randomassign` "
-                    "`randomkickvoice` `russianroulette` `solo_channels`"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
-                name="🎙️ Vocal – Lock & Mute",
-                value=(
-                    "`lockvoice` `unlockvoice` `muteall` `unmuteall` `deafenall` `undeafenall` "
-                    "`voice_mute_all_server` `voice_unmute_all_server` `voice_deafen_all_server`"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
-                name="🎙️ Vocal – Info & Config",
-                value=(
-                    "`voicestats` `movelog` `whoisvoice` `listvoice` `joinme` `join` `leave` "
-                    "`voiceinfo` `voice_limit` `voice_bitrate`"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
-                name="🎙️ Vocal – Info & Bot",
-                value=(
-                    "`voicestats` `movelog` `whoisvoice` `listvoice` `joinme` `join` `leave`"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
-                name="🎙️ Divers",
-                value="(aucune pour l'instant)",
-                inline=False
-            )
-
-            embed.add_field(
-                name="🎫 Tickets",
-                value=(
-                    "`ticket` – ouvre un nouveau ticket (préfixe uniquement)."
-                    "\n`ticket setup` – voir/modifier la configuration (admin) (accessible aussi via `/ticket setup`)."
-                    "\nSous‑commandes : category, logs, title, description, addmanager, removemanager,"
-                    " adddeletor, removedeletor, access_add, access_remove, panel_add, panel_remove, panel_list."
-                    "\n`ticket claim` / `ticket close` / `ticket delete` pour gérer un ticket ouvert (préfixe uniquement)."
-                ),
-                inline=False
-            )
-
-            embed.set_footer(text="Préfixe : +  •  Hébergé sur Render : 512 MB RAM & 0.15 CPU – gardez les commandes légères")
-            await ctx.send(embed=embed)
+            # interactive menu with buttons selects
+            embed = create_main_help_embed()
+            view = HelpView()
+            await ctx.send(embed=embed, view=view)
             return
 
         # --- aide spécifique ------------------------------------------------
@@ -224,9 +184,14 @@ class System(commands.Cog):
                 "exemple": "+ticket"
             },
             "ticket setup": {
-                "description": "Voir/modifier la configuration des tickets (admin). Disponible en slash `/ticket setup`.",
+                "description": "Voir/modifier la configuration des tickets (admin).",
                 "usage": "+ticket setup",
                 "exemple": "+ticket setup"
+            },
+            "ticket setup wizard": {
+                "description": "Assistant interactif pas-à-pas pour configurer les tickets.",
+                "usage": "+ticket setup wizard",
+                "exemple": "+ticket setup wizard"
             },
             "ticket claim": {
                 "description": "Réclamer un ticket (staff). Usage en préfixe seulement (+ticket claim).",
