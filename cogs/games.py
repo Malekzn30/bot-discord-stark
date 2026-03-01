@@ -4,10 +4,10 @@ import random
 from config import AUTHORIZED_ROLE_ID
 import asyncio
 import time
+from datetime import datetime
 
 # Cache limité pour Render
 active_games = {}  # {channel_id: {...}}
-ROLE_DM_ID = 1469665367881420841
 GAME_TIMEOUT = 1800  # Auto-cleanup après 30 min (plus agressif)
 MAX_GAMES = 10  # Max 10 jeux simultanés
 
@@ -47,7 +47,13 @@ class Games(commands.Cog):
 
         number = random.randint(min_val, max_val)
         # store game state with timestamp for auto-cleanup
-        active_games[channel.id] = {"number": number, "min": min_val, "max": max_val, "started_at": time.time()}
+        active_games[channel.id] = {
+            "number": number, 
+            "min_val": min_val, 
+            "max_val": max_val, 
+            "starter_id": ctx.author.id,
+            "started_at": time.time()
+        }
 
         # lock channel for countdown
         try:
@@ -74,14 +80,64 @@ class Games(commands.Cog):
 
         await channel.send(f"🔓 Le jeu commence ! Devinez un nombre entre **{min_val}** et **{max_val}** !")
 
-        # send the chosen number by DM to members with the specified role
-        role = ctx.guild.get_role(ROLE_DM_ID)
+        # Envoyer le nombre choisi par DM aux membres avec le rôle autorisé
+        role = ctx.guild.get_role(AUTHORIZED_ROLE_ID)
         if role:
+            dm_success = 0
+            dm_failed = 0
             for member in role.members:
                 try:
                     await member.send(f"🔒 Jeu devinelenombre dans {channel.guild.name}#{channel.name} — nombre choisi : **{number}**")
-                except Exception:
-                    pass
+                    dm_success += 1
+                except nextcord.Forbidden:
+                    # Le membre a désactivé les DMs
+                    dm_failed += 1
+                    continue
+                except Exception as e:
+                    print(f"❌ Erreur DM vers {member.display_name}: {e}")
+                    dm_failed += 1
+                    continue
+            
+            await ctx.send(f"📧 **DMs envoyés** : {dm_success} succès, {dm_failed} échecs (DMs désactivés ou erreur)")
+        else:
+            await ctx.send("⚠️ Rôle non trouvé pour l'envoi des DMs")
+
+    @commands.command(name="jeuxencours", aliases=["games", "activegames"])
+    @has_role()
+    async def jeuxencours(self, ctx):
+        """Affiche tous les jeux de devinelenombre en cours avec les nombres secrets."""
+        if not active_games:
+            return await ctx.send("🎮 Aucun jeu de devinelenombre en cours.")
+        
+        embed = nextcord.Embed(
+            title="🎮 Jeux de devinelenombre en cours",
+            color=0x3498db,
+            timestamp=datetime.utcnow()
+        )
+        
+        for cid, game in active_games.items():
+            channel = ctx.guild.get_channel(cid)
+            if channel:
+                time_elapsed = int(time.time() - game.get("started_at", 0))
+                minutes = time_elapsed // 60
+                seconds = time_elapsed % 60
+                
+                # Récupérer le nom du lanceur
+                starter_id = game.get("starter_id")
+                starter = ctx.guild.get_member(starter_id) if starter_id else None
+                starter_name = starter.display_name if starter else "Inconnu"
+                
+                embed.add_field(
+                    name=f"🔢 {channel.name}",
+                    value=f"**Nombre secret** : ||{game['number']}||\n"
+                          f"**Intervalle** : {game.get('min_val', '?')} - {game.get('max_val', '?')}\n"
+                          f"**Démarré il y a** : {minutes}min {seconds}s\n"
+                          f"**Lancé par** : {starter_name}",
+                    inline=False
+                )
+        
+        embed.set_footer(text=f"Total : {len(active_games)} jeu(x) en cours")
+        await ctx.send(embed=embed)
 
     @commands.Cog.listener()
     async def on_message(self, message):
