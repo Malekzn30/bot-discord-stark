@@ -56,7 +56,11 @@ class Moderation(commands.Cog):
             )
         """)
         # Ajouter la colonne moderator_id si elle n'existe pas (pour compatibilité)
-        self.cursor.execute("ALTER TABLE warns ADD COLUMN moderator_id INTEGER DEFAULT NULL")
+        try:
+            self.cursor.execute("ALTER TABLE warns ADD COLUMN moderator_id INTEGER DEFAULT NULL")
+        except sqlite3.OperationalError:
+            # La colonne existe déjà, pas d'erreur
+            pass
         # Créer un index sur user_id pour les requêtes rapides
         self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_id ON warns(user_id)")
         self.db.commit()
