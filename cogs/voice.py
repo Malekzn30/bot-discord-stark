@@ -185,7 +185,7 @@ class Voice(commands.Cog):
     # ============================================================
     # 7) MOOVE TOUT LE SERVEUR → 1 SALON
     # ============================================================
-    @commands.command(name="mooveserver")
+    @commands.command(name="mooveserver", aliases=["server"])
     @has_role()
     async def mooveserver(self, ctx, channel: nextcord.VoiceChannel = None):
         if not channel:
@@ -472,6 +472,47 @@ class Voice(commands.Cog):
             desc += f"• {m.mention}\n"
 
         await ctx.send(embed=embed_msg("🎲 Split aléatoire", desc))
+
+    # ============================================================
+    # SPLIT (séparer en 2 groupes et les déplacer)
+    # ============================================================
+    @commands.command(name="split")
+    @has_role()
+    async def split(self, ctx, category_id: int = None):
+        if not ctx.author.voice:
+            return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+
+        if not category_id:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+split <ID_CAT>`", 0xff0000))
+
+        cat = ctx.guild.get_channel(category_id)
+        vcs = [c for c in cat.channels if isinstance(c, nextcord.VoiceChannel)]
+
+        if len(vcs) < 2:
+            return await ctx.send(embed=embed_msg("❌ Impossible", "Il faut au moins 2 salons vocaux.", 0xff0000))
+
+        members = list(ctx.author.voice.channel.members)
+        random.shuffle(members)
+
+        mid = len(members) // 2
+        group1 = members[:mid]
+        group2 = members[mid:]
+
+        # Déplacer le groupe 1 dans les premiers salons
+        for i, m in enumerate(group1):
+            target = vcs[i % (len(vcs) // 2 or 1)]
+            old = m.voice.channel
+            await m.move_to(target)
+            last_moves[m.id] = old.id
+
+        # Déplacer le groupe 2 dans les salons restants
+        for i, m in enumerate(group2):
+            target = vcs[(len(vcs) // 2 or 1) + i % (len(vcs) - (len(vcs) // 2 or 1))]
+            old = m.voice.channel
+            await m.move_to(target)
+            last_moves[m.id] = old.id
+
+        await ctx.send(embed=embed_msg("🪓 Split effectué", f"{len(members)} membres séparés en 2 groupes."))
 
     # ============================================================
     # RANDOM ASSIGN (assigner chaque membre à un salon aléatoire)
