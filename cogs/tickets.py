@@ -860,8 +860,55 @@ class Tickets(commands.Cog):
     # ---------------------------
     @commands.group(name="ticket", invoke_without_command=True)
     async def ticket(self, ctx):
-        """⚠️ Utilisez les boutons dans le panel de tickets pour créer un ticket"""
-        await ctx.send("🎫 Pour créer un ticket, utilisez les boutons dans le panel de tickets !\nSi vous êtes admin, utilisez `+ticket setup panel_add` pour créer un panel.")
+        """🎫 Système de tickets - Créez des tickets via les panels"""
+        
+        # Vérifier s'il y a des panels actifs
+        if PANELS:
+            embed = nextcord.Embed(
+                title="🎫 Système de Tickets",
+                description="Utilisez les boutons dans les panels ci-dessous pour créer un ticket, ou utilisez `+ticket setup` pour configurer.",
+                color=0x3498db
+            )
+            
+            # Lister les panels disponibles
+            for pid, panel in PANELS.items():
+                channel = ctx.guild.get_channel(panel.get("channel_id"))
+                if channel:
+                    embed.add_field(
+                        name=f"🎫 Panel {pid}",
+                        value=f"**Salon** : {channel.mention}\n**Titre** : {panel.get('title', 'Sans titre')}",
+                        inline=False
+                    )
+            
+            embed.add_field(
+                name="🔧 Configuration",
+                value="Utilisez `+ticket setup` pour modifier la configuration",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            
+        else:
+            # Aucun panel - proposer de créer un
+            embed = nextcord.Embed(
+                title="🎫 Aucun panel configuré",
+                description="Aucun panel de tickets n'est actuellement configuré. Vous devez d'abord créer un panel avant que les membres puissent créer des tickets.",
+                color=0xff6b6b
+            )
+            
+            embed.add_field(
+                name="👤 Pour les admins",
+                value="Utilisez `+ticket setup panel_add #salon \"Titre\"` pour créer un panel",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="📋 Étapes",
+                value="1️⃣ Créer un panel avec `+ticket setup panel_add`\n2️⃣ Configurer les catégories avec `+ticket setup categories`\n3️⃣ Les membres pourront créer des tickets !",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
 
     # ---------------------------
     # Commandes de configuration
