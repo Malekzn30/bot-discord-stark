@@ -49,9 +49,23 @@ def create_main_help_embed():
     return embed
 
 
-def create_category_embed(label: str):
-    desc = HELP_CATEGORIES.get(label, "")
-    embed = nextcord.Embed(title=f"📖 {label}", description=desc, color=0x3498db)
+def paginate_commands(cmd_string: str, per_page: int = 10):
+    """Return a list of pages, each containing up to `per_page` commands."""
+    items = cmd_string.split()
+    pages = []
+    for i in range(0, len(items), per_page):
+        pages.append(" ".join(items[i : i + per_page]))
+    return pages
+
+
+def create_category_page_embed(label: str, pages: list[str], page_index: int):
+    """Build an embed for a specific page of a category."""
+    desc = pages[page_index]
+    embed = nextcord.Embed(
+        title=f"📖 {label} (page {page_index + 1}/{len(pages)})",
+        description=desc,
+        color=0x3498db,
+    )
     embed.set_footer(text="⬅️ Appuyez sur Retour pour revenir à la liste des catégories.")
     return embed
 
@@ -62,9 +76,44 @@ class HelpButton(nextcord.ui.Button):
         self.label = label
 
     async def callback(self, interaction: nextcord.Interaction):
-        embed = create_category_embed(self.label)
-        view = BackView()
+        # build pages for the selected category
+        cmds = HELP_CATEGORIES.get(self.label, "")
+        pages = paginate_commands(cmds, per_page=10)
+        embed = create_category_page_embed(self.label, pages, 0)
+        view = CategoryView(self.label, pages)
         await interaction.response.edit_message(embed=embed, view=view)
+
+
+class NavButton(nextcord.ui.Button):
+    def __init__(self, direction: str, parent: "CategoryView"):
+        label = "◀️" if direction == "prev" else "▶️"
+        super().__init__(label=label, style=nextcord.ButtonStyle.secondary)
+        self.direction = direction
+        self.parent_view_ref = parent
+
+    async def callback(self, interaction: nextcord.Interaction):
+        view: CategoryView = self.parent_view_ref
+        if self.direction == "prev":
+            view.current_page = (view.current_page - 1) % len(view.pages)
+        else:
+            view.current_page = (view.current_page + 1) % len(view.pages)
+        embed = create_category_page_embed(view.label, view.pages, view.current_page)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class CategoryView(nextcord.ui.View):
+    def __init__(self, label: str, pages: list[str]):
+        super().__init__(timeout=180)
+        self.label = label
+        self.pages = pages
+        self.current_page = 0
+
+        # add navigation buttons only if more than one page
+        if len(pages) > 1:
+            self.add_item(NavButton("prev", self))
+            self.add_item(NavButton("next", self))
+        # always allow backing out to main help
+        self.add_item(BackButton())
 
 
 class BackButton(nextcord.ui.Button):
@@ -184,7 +233,7 @@ class System(commands.Cog):
                 "exemple": "+ticket"
             },
             "ticket setup": {
-                "description": "Voir/modifier la configuration des tickets (admin).",
+                "description": "Voir/modifier la configuration des tickets (admin) via boutons ; vous pouvez créer/éditer des panels, leurs formulaires et options.",
                 "usage": "+ticket setup",
                 "exemple": "+ticket setup"
             },
