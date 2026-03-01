@@ -15,8 +15,6 @@ intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="+", intents=intents, help_command=None)
-
-# Pour +stat et +help
 bot.start_time = time.time()
 
 @bot.event
@@ -28,10 +26,6 @@ def load_cogs():
         if file.endswith(".py"):
             bot.load_extension(f"cogs.{file[:-3]}")
             print(f"[+] Cog chargé : {file}")
-
-def run_bot():
-    load_cogs()
-    bot.run(TOKEN)
 
 # ============================
 # FAKE FLASK SERVER (pour Render)
@@ -51,5 +45,9 @@ def run_flask():
 # ============================
 
 if __name__ == "__main__":
-    threading.Thread(target=run_bot).start()
-    run_flask()
+    # Lancer Flask dans un thread secondaire
+    threading.Thread(target=run_flask).start()
+
+    # Lancer le bot Discord dans le thread principal
+    load_cogs()
+    bot.run(TOKEN)
