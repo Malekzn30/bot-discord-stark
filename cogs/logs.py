@@ -2,7 +2,10 @@ import nextcord
 from nextcord.ext import commands
 from datetime import datetime
 
+# ============================
 # Mémoire RAM : aucun stockage
+# ============================
+
 LOG_CHANNELS = {
     "warn": None,
     "commands": None,
@@ -23,10 +26,7 @@ async def send_log(bot, log_type: str, message: str, ctx=None):
     if not log_channel:
         return
 
-    # Récupération du salon où la commande a été utilisée
     used_in = ctx.channel.mention if ctx else "Inconnu"
-
-    # Heure actuelle
     now = datetime.now().strftime("%H:%M:%S")
 
     embed = nextcord.Embed(
@@ -46,7 +46,7 @@ async def send_log(bot, log_type: str, message: str, ctx=None):
 # Cog de configuration
 # ============================
 
-class LogsSetup(commands.Cog):
+class Logs(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
@@ -86,5 +86,9 @@ class LogsSetup(commands.Cog):
 
         await ctx.send(f"✔️ Log `{log_type}` configuré dans {channel.mention} !")
 
+# ============================
+# Setup du cog
+# ============================
+
 def setup(bot):
-    bot.add_cog(LogsSetup(bot))
+    bot.add_cog(Logs(bot))
