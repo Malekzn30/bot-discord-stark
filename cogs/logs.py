@@ -417,6 +417,29 @@ class LogsConfig(commands.Cog):
             )
 
         await ctx.send(embed=embed)
+
+    @commands.command(name="logs_clear")
+    @commands.has_permissions(administrator=True)
+    async def logs_clear(self, ctx, category: str = None):
+        if not category:
+            return await ctx.send("❌ Utilise : `+logs_clear <catégorie>`")
+        
+        category = category.lower()
+        if category not in LOG_CATEGORIES:
+            return await ctx.send(f"❌ Catégorie invalide. Valides: {', '.join(LOG_CATEGORIES)}")
+        
+        LOG_CHANNELS[category] = None
+        save_config(LOG_CHANNELS)
+        await ctx.send(f"🗑️ Logs {category} effa cés.")
+
+    @commands.command(name="logs_list_categories")
+    async def logs_list_categories(self, ctx):
+        desc = ""
+        for cat in LOG_CATEGORIES:
+            icon = CATEGORY_ICONS.get(cat, "📄")
+            desc += f"{icon} `{cat}`\n"
+        embed = nextcord.Embed(title="📋 Catégories de logs disponibles", description=desc, color=0x3498db)
+        await ctx.send(embed=embed)
 # ============================================================
 # SETUP FINAL DU COG — ASSEMBLAGE COMPLET
 # ============================================================

@@ -4,9 +4,13 @@ from datetime import datetime
 import os
 import json
 import asyncio
+from typing import List
+import nextcord
+from nextcord import ui
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "tickets_config.json")
 DATA_PATH = os.path.join(os.path.dirname(__file__), "tickets_data.json")
+PANELS_PATH = os.path.join(os.path.dirname(__file__), "tickets_panels.json")
 
 def load_config():
     if not os.path.exists(CONFIG_PATH):
@@ -54,13 +58,45 @@ def save_data(data):
     except Exception as e:
         print(f"❌ Erreur write data tickets : {e}")
 
+def load_panels():
+    if not os.path.exists(PANELS_PATH):
+        with open(PANELS_PATH, "w") as f:
+            json.dump({}, f, indent=4)
+        return {}
+    try:
+        with open(PANELS_PATH, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_panels(data):
+    try:
+        with open(PANELS_PATH, "w") as f:
+            json.dump(data, f, indent=4)
+    except Exception as e:
+        print(f"❌ Erreur save panels: {e}")
+
 CONFIG = load_config()
 TICKET_DATA = load_data()  # { "channel_id": { "thread_id": ..., "owner": ... } }
+PANELS = load_panels()  # { panel_id: {"channel_id":..., "message_id":..., "category":..., "title":..., "description":..., "allowed_roles": [...], "fields": [{"label":"...","style":"short|paragraph"}] } }
 
 
 class Tickets(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        # restore views for existing panels on startup
+        for pid, panel in PANELS.items():
+            try:
+                chan = self.bot.get_channel(panel["channel_id"]) if panel.get("channel_id") else None
+                if chan:
+                    msg = None
+                    try:
+                        msg = chan.fetch_message(panel.get("message_id"))
+                    except Exception:
+                        msg = None
+                    # can't reattach non-persistent views easily here; they will work when re-created
+            except Exception:
+                pass
 
     # ---------------------------
     # commandes de configuration
@@ -166,6 +202,55 @@ class Tickets(commands.Cog):
         save_config(CONFIG)
         await ctx.send(f"✅ {role.mention} peut maintenant ouvrir des tickets.")
 
+    @ticket_setup.command(name="panel_add")
+    @commands.has_permissions(administrator=True)
+    async def panel_add(self, ctx, channel: nextcord.TextChannel, category: nextcord.CategoryChannel, *, title: str = "🎫 Ticket", description: str = "Cliquez pour ouvrir un ticket."):
+        """Créer un panel de ticket minimal et l'envoyer dans <channel>."""
+        pid = str(int(datetime.utcnow().timestamp() * 1000))
+        panel = {
+            "channel_id": channel.id,
+            "message_id": None,
+            "category": category.id,
+            "title": title,
+            "description": description,
+            "allowed_roles": [],
+            # default fields: sujet (short) + description (paragraph)
+            "fields": [
+                {"label": "Sujet", "style": "short"},
+                {"label": "Description", "style": "paragraph"}
+            ]
+        }
+        PANELS[pid] = panel
+        save_panels(PANELS)
+
+        view = TicketPanelView(self.bot, pid)
+        sent = await channel.send(embed=nextcord.Embed(title=title, description=description, color=0x3498db), view=view)
+        panel["message_id"] = sent.id
+        save_panels(PANELS)
+
+        await ctx.send(f"✅ Panel créé et envoyé (id: {pid}) dans {channel.mention}.")
+
+    @ticket_setup.command(name="panel_remove")
+    @commands.has_permissions(administrator=True)
+    async def panel_remove(self, ctx, panel_id: str):
+        if panel_id not in PANELS:
+            return await ctx.send("❌ Panel introuvable.")
+        PANELS.pop(panel_id)
+        save_panels(PANELS)
+        await ctx.send(f"✅ Panel {panel_id} supprimé.")
+
+    @ticket_setup.command(name="panel_list")
+    @commands.has_permissions(administrator=True)
+    async def panel_list(self, ctx):
+        if not PANELS:
+            return await ctx.send("❌ Aucun panel configuré.")
+        desc = ""
+        for pid, p in PANELS.items():
+            ch = ctx.guild.get_channel(p.get("channel_id"))
+            cat = ctx.guild.get_channel(p.get("category"))
+            desc += f"• {pid} — channel: {ch.mention if ch else p.get('channel_id')} — category: {cat.name if cat else p.get('category')} — title: {p.get('title')}\n"
+        await ctx.send(embed=nextcord.Embed(title="Panels", description=desc, color=0x3498db))
+
     @ticket_setup.command(name="access_remove")
     @commands.has_permissions(administrator=True)
     async def access_remove(self, ctx, role: nextcord.Role):
@@ -221,9 +306,11 @@ class Tickets(commands.Cog):
     # helpers & logs
     # ---------------------------
     async def _open_ticket(self, ctx):
-        if CONFIG["category"] is None:
+        # Backwards-compatible: if called without panel, use global CONFIG
+        category_id = CONFIG.get("category")
+        if category_id is None:
             return await ctx.send("❌ La catégorie de tickets n'est pas configurée.")
-        category = ctx.guild.get_channel(CONFIG["category"])
+        category = ctx.guild.get_channel(category_id)
         if category is None or not isinstance(category, nextcord.CategoryChannel):
             return await ctx.send("❌ La catégorie configurée est invalide.")
 
@@ -241,9 +328,7 @@ class Tickets(commands.Cog):
             if role:
                 overwrites[role] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-        chan = await ctx.guild.create_text_channel(
-            name, category=category, overwrites=overwrites
-        )
+        chan = await ctx.guild.create_text_channel(name, category=category, overwrites=overwrites)
         embed = nextcord.Embed(
             title=CONFIG["embed_title"],
             description=CONFIG["embed_description"],
@@ -322,3 +407,74 @@ class Tickets(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Tickets(bot))
+
+
+class TicketPanelView(ui.View):
+    def __init__(self, bot, panel_id: str):
+        super().__init__(timeout=None)
+        self.bot = bot
+        self.panel_id = panel_id
+
+    @ui.button(label="Ouvrir un ticket", style=nextcord.ButtonStyle.primary, custom_id="ticket_open_button")
+    async def open_button(self, button: ui.Button, interaction: nextcord.Interaction):
+        pid = self.panel_id
+        panel = PANELS.get(pid)
+        if not panel:
+            return await interaction.response.send_message("❌ Panel introuvable.", ephemeral=True)
+
+        # permission check
+        allowed = panel.get("allowed_roles", []) or []
+        if allowed:
+            if not any(r.id in allowed for r in interaction.user.roles):
+                return await interaction.response.send_message("❌ Vous n'avez pas la permission d'ouvrir ce ticket.", ephemeral=True)
+
+        # build modal
+        class TicketModal(ui.Modal):
+            def __init__(self):
+                super().__init__(title=panel.get("title", "Ticket"))
+                for f in panel.get("fields", []):
+                    style = nextcord.TextInputStyle.short if f.get("style") == "short" else nextcord.TextInputStyle.paragraph
+                    self.add_item(nextcord.ui.TextInput(label=f.get("label", "Réponse"), style=style, required=True))
+
+            async def callback(self, modal_interaction: nextcord.Interaction):
+                # create ticket channel
+                guild = modal_interaction.guild
+                category = guild.get_channel(panel.get("category"))
+                if category is None:
+                    return await modal_interaction.response.send_message("❌ Catégorie du panel invalide.", ephemeral=True)
+
+                # increment counter
+                CONFIG["counter"] = CONFIG.get("counter", 0) + 1
+                save_config(CONFIG)
+                name = f"ticket-{CONFIG['counter']}"
+
+                overwrites = {guild.default_role: nextcord.PermissionOverwrite(read_messages=False)}
+                # owner
+                overwrites[modal_interaction.user] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
+                # managers
+                for rid in CONFIG.get("manager_roles", []):
+                    role = guild.get_role(rid)
+                    if role:
+                        overwrites[role] = nextcord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+                chan = await guild.create_text_channel(name, category=category, overwrites=overwrites)
+
+                # prepare embed with modal responses
+                desc = ""
+                for item in self.children:
+                    desc += f"**{item.label}**\n{item.value}\n\n"
+
+                embed = nextcord.Embed(title=panel.get("title", "Ticket ouvert"), description=panel.get("description", ""), color=0x95A5A6, timestamp=datetime.utcnow())
+                embed.add_field(name="Infos", value=desc, inline=False)
+                embed.set_footer(text=f"Ticket #{CONFIG['counter']}")
+
+                await chan.send(modal_interaction.user.mention, embed=embed)
+
+                # track ticket
+                thread_id = await Tickets._create_log_thread if False else None
+                TICKET_DATA[str(chan.id)] = {"thread_id": None, "owner": modal_interaction.user.id}
+                save_data(TICKET_DATA)
+
+                await modal_interaction.response.send_message(f"✅ Ticket créé : {chan.mention}", ephemeral=True)
+
+        await interaction.response.send_modal(TicketModal())

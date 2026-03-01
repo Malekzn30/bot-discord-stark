@@ -45,12 +45,17 @@ class Moderation(commands.Cog):
         self.bot = bot
         self.db = sqlite3.connect("warns.sqlite")
         self.cursor = self.db.cursor()
+        # Optimiser SQLite pour moins de mémoire
+        self.db.execute("PRAGMA journal_mode=WAL")
+        self.db.execute("PRAGMA synchronous=NORMAL")
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS warns (
                 user_id INTEGER,
                 reason TEXT
             )
         """)
+        # Créer un index sur user_id pour les requêtes rapides
+        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_id ON warns(user_id)")
         self.db.commit()
 
     # ============================================================
@@ -355,6 +360,38 @@ class Moderation(commands.Cog):
             return await ctx.send("❌ Utilise : `+slowmode <secondes>`")
         await ctx.channel.edit(slowmode_delay=seconds)
         await ctx.send(f"🐌 Slowmode réglé sur **{seconds}s**.")
+
+    @commands.command(name="slowmode_disable")
+    async def slowmode_disable(self, ctx):
+        await ctx.channel.edit(slowmode_delay=0)
+        await ctx.send("🚀 Slowmode désactivé.")
+
+    @commands.command(name="massunmute")
+    async def massunmute(self, ctx):
+        role = nextcord.utils.get(ctx.guild.roles, name="Muted")
+        if not role:
+            return await ctx.send("❌ Rôle 'Muted' introuvable.")
+        count = 0
+        for member in role.members:
+            try:
+                await member.remove_roles(role)
+                count += 1
+            except Exception:
+                pass
+        await ctx.send(f"🔊 {count} membres unmute.")
+
+    @commands.command(name="warn_check")
+    async def warn_check(self, ctx, member: nextcord.Member = None):
+        if not member:
+            return await ctx.send("❌ Utilise : `+warn_check @membre`")
+        self.cursor.execute("SELECT COUNT(*) FROM warns WHERE user_id = ?", (member.id,))
+        count = self.cursor.fetchone()[0]
+        await ctx.send(f"⚠️ {member.mention} a **{count}** avertissements.")
+
+    @commands.command(name="bulkdelete")
+    async def bulkdelete(self, ctx, limit: int = 50):
+        deleted = await ctx.channel.purge(limit=limit + 1)
+        await ctx.send(f"🗑️ {len(deleted)-1} messages supprimés.", delete_after=3)
 
     # ============================================================
     # SETNICK / RESETNICK

@@ -4,8 +4,18 @@ import asyncio
 import random
 from config import AUTHORIZED_ROLE_ID
 
-last_moves = {}
+# Limiter cache EXTRÊMEMENT pour Render gratuit
+MAX_CACHE_SIZE = 50  # Très petit
+last_moves = {}  # {member_id: channel_id}
 shuffle_tasks = {}
+
+def cleanup_memory():
+    """Nettoyage agressif."""
+    global last_moves
+    if len(last_moves) > MAX_CACHE_SIZE:
+        # Garder seulement 25
+        items = list(last_moves.items())[-25:]
+        last_moves = dict(items)
 
 def has_role():
     async def predicate(ctx):
@@ -1049,6 +1059,412 @@ class Voice(commands.Cog):
 
         await ctx.voice_client.disconnect()
         await ctx.send(embed=embed_msg("👋 Déconnexion", "J'ai quitté le salon vocal."))
+
+    # ============================================================
+    # REBALANCE CATEGORY (rééquilibrer une catégorie)
+    # ============================================================
+    @commands.command(name="rebalance_category")
+    @has_role()
+    async def rebalance_category(self, ctx, category_id: int = None):
+        if not category_id:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+rebalance_category <ID_CAT>`", 0xff0000))
+
+        cat = ctx.guild.get_channel(category_id)
+        if not isinstance(cat, nextcord.CategoryChannel):
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Catégorie invalide.", 0xff0000))
+
+        # Récupérer tous les membres et les salons vocaux
+        vcs = [c for c in cat.channels if isinstance(c, nextcord.VoiceChannel)]
+        if len(vcs) < 2:
+            return await ctx.send(embed=embed_msg("❌ Impossible", "Il faut au moins 2 salons vocaux.", 0xff0000))
+
+        members = []
+        for vc in vcs:
+            members.extend(vc.members)
+            if len(members) > 500:  # Limite pour Render
+                break
+
+        if not members:
+            return await ctx.send(embed=embed_msg("⚠️ Aucun membre", "Aucun membre en vocal."))
+
+        # Redistribuer rapidement
+        random.shuffle(members)
+        cleanup_memory()  # Nettoyer avant
+        moved = 0
+        for i, m in enumerate(members):
+            target = vcs[i % len(vcs)]
+            old = m.voice.channel
+            await m.move_to(target)
+            last_moves[m.id] = old.id
+            moved += 1
+
+        await ctx.send(embed=embed_msg("⚖️ Rééquilibrage effectué", f"{moved} membres répartis équitablement dans {len(vcs)} salons."))
+
+    # ============================================================
+    # MOVECAT REBALANCE (déplacer et rééquilibrer)
+    # ============================================================
+    @commands.command(name="movecat_rebalance")
+    @has_role()
+    async def movecat_rebalance(self, ctx, source_id: int = None, dest_id: int = None):
+        if not source_id or not dest_id:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+movecat_rebalance <ID_CAT_SOURCE> <ID_CAT_DEST>`", 0xff0000))
+
+        src_cat = ctx.guild.get_channel(source_id)
+        dst_cat = ctx.guild.get_channel(dest_id)
+
+        if not isinstance(src_cat, nextcord.CategoryChannel) or not isinstance(dst_cat, nextcord.CategoryChannel):
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Catégories invalides.", 0xff0000))
+
+        # Récupérer tous les membres de la catégorie source
+        members = []
+        for vc in src_cat.channels:
+            if isinstance(vc, nextcord.VoiceChannel):
+                members.extend(vc.members)
+
+        if not members:
+            return await ctx.send(embed=embed_msg("⚠️ Aucun membre", "Aucun membre dans la catégorie source."))
+
+        # Salons vocaux de la destination
+        dst_vcs = [c for c in dst_cat.channels if isinstance(c, nextcord.VoiceChannel)]
+        if not dst_vcs:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Aucun salon vocal dans la catégorie destination.", 0xff0000))
+
+        # Redistribuer dans la destination
+        random.shuffle(members)
+        moved = 0
+        for i, m in enumerate(members):
+            target = dst_vcs[i % len(dst_vcs)]
+            old = m.voice.channel
+            await m.move_to(target)
+            last_moves[m.id] = old.id
+            moved += 1
+
+        await ctx.send(embed=embed_msg("🚚 Déplacement + rééquilibrage", f"{moved} membres déplacés et répartis dans {len(dst_vcs)} salons."))
+
+    # ============================================================
+    # MOVEALL CATEGORY (déplacer toute une catégorie → 1 salon)
+    # ============================================================
+    @commands.command(name="moveall_category")
+    @has_role()
+    async def moveall_category(self, ctx, category_id: int = None, target_channel: nextcord.VoiceChannel = None):
+        if not category_id or not target_channel:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+moveall_category <ID_CAT> #salon_cible`", 0xff0000))
+
+        cat = ctx.guild.get_channel(category_id)
+        if not isinstance(cat, nextcord.CategoryChannel):
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Catégorie invalide.", 0xff0000))
+
+        members = []
+        for vc in cat.channels:
+            if isinstance(vc, nextcord.VoiceChannel):
+                members.extend(vc.members)
+
+        if not members:
+            return await ctx.send(embed=embed_msg("⚠️ Aucun membre", "Aucun membre dans cette catégorie."))
+
+        moved = 0
+        for m in members:
+            old = m.voice.channel
+            await m.move_to(target_channel)
+            last_moves[m.id] = old.id
+            moved += 1
+
+        await ctx.send(embed=embed_msg("📥 Catégorie déplacée", f"{moved} membres → {format_channel(target_channel)}"))
+
+    # ============================================================
+    # SMART BALANCE (équilibre intelligent par rôle/niveau)
+    # ============================================================
+    @commands.command(name="smartbalance")
+    @has_role()
+    async def smartbalance(self, ctx, category_id: int = None):
+        if not category_id:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+smartbalance <ID_CAT>`", 0xff0000))
+
+        cat = ctx.guild.get_channel(category_id)
+        if not isinstance(cat, nextcord.CategoryChannel):
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Catégorie invalide.", 0xff0000))
+
+        vcs = [c for c in cat.channels if isinstance(c, nextcord.VoiceChannel)]
+        if len(vcs) < 2:
+            return await ctx.send(embed=embed_msg("❌ Impossible", "Il faut au moins 2 salons vocaux.", 0xff0000))
+
+        members = []
+        for vc in vcs:
+            members.extend(vc.members)
+
+        if not members:
+            return await ctx.send(embed=embed_msg("⚠️ Aucun membre", "Aucun membre en vocal."))
+
+        # Trier par nombre de rôles (+ de rôles = + de poids)
+        members.sort(key=lambda m: len(m.roles), reverse=True)
+
+        # Répartir en round-robin
+        moved = 0
+        for i, m in enumerate(members):
+            target = vcs[i % len(vcs)]
+            old = m.voice.channel
+            await m.move_to(target)
+            last_moves[m.id] = old.id
+            moved += 1
+
+        await ctx.send(embed=embed_msg("🧠 Smart Balance", f"{moved} membres répartis par rôle dans {len(vcs)} salons."))
+
+    # ============================================================
+    # MOVESERVER + REBALANCE (tout le serveur)
+    # ============================================================
+    @commands.command(name="moveserver_rebalance")
+    @has_role()
+    async def moveserver_rebalance(self, ctx, category_id: int = None):
+        if not category_id:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+moveserver_rebalance <ID_CAT>`", 0xff0000))
+
+        cat = ctx.guild.get_channel(category_id)
+        if not isinstance(cat, nextcord.CategoryChannel):
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Catégorie invalide.", 0xff0000))
+
+        # Récupérer tous les membres en vocal du serveur
+        members = []
+        for m in ctx.guild.members:
+            if m.voice and m.voice.channel:
+                members.append(m)
+
+        if not members:
+            return await ctx.send(embed=embed_msg("⚠️ Aucun membre", "Aucun membre en vocal."))
+
+        # Salons vocaux de la catégorie
+        vcs = [c for c in cat.channels if isinstance(c, nextcord.VoiceChannel)]
+        if not vcs:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Aucun salon vocal dans cette catégorie.", 0xff0000))
+
+        random.shuffle(members)
+        moved = 0
+        for i, m in enumerate(members):
+            target = vcs[i % len(vcs)]
+            old = m.voice.channel
+            await m.move_to(target)
+            last_moves[m.id] = old.id
+            moved += 1
+
+        await ctx.send(embed=embed_msg("🌐 Serveur rééquilibré", f"{moved} membres du serveur répartis dans {len(vcs)} salons."))
+
+    @commands.command(name="rebalanceserver")
+    @has_role()
+    async def rebalanceserver(self, ctx):
+        """Rééquilibre automatiquement tout le serveur dans TOUTES les catégories vocales."""
+        
+        # Récupérer toutes les catégories vocales
+        categories = [c for c in ctx.guild.categories if any(isinstance(ch, nextcord.VoiceChannel) for ch in c.channels)]
+        if not categories:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Aucune catégorie vocale trouvée.", 0xff0000))
+
+        # Récupérer tous les membres en vocal
+        all_members = []
+        for m in ctx.guild.members:
+            if m.voice and m.voice.channel:
+                all_members.append(m)
+
+        if not all_members:
+            return await ctx.send(embed=embed_msg("⚠️ Aucun membre", "Aucun membre en vocal."))
+
+        # Mélanger et répartir entre toutes les catégories
+        random.shuffle(all_members)
+        
+        total_vcs = sum(len([c for c in cat.channels if isinstance(c, nextcord.VoiceChannel)]) for cat in categories)
+        all_vcs = []
+        for cat in categories:
+            all_vcs.extend([c for c in cat.channels if isinstance(c, nextcord.VoiceChannel)])
+
+        if not all_vcs:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Aucun salon vocal trouvé.", 0xff0000))
+
+        moved = 0
+        for i, m in enumerate(all_members):
+            target = all_vcs[i % len(all_vcs)]
+            old = m.voice.channel
+            await m.move_to(target)
+            last_moves[m.id] = old.id
+            moved += 1
+
+        await ctx.send(embed=embed_msg("🌍 Rééquilibrage serveur complet", f"{moved} membres répartis dans {len(all_vcs)} salons vocaux."))
+
+    @commands.command(name="moveserver_single")
+    @has_role()
+    async def moveserver_single(self, ctx, target_channel: nextcord.VoiceChannel = None):
+        if not target_channel:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+moveserver_single #salon`", 0xff0000))
+
+        members = []
+        for m in ctx.guild.members:
+            if m.voice and m.voice.channel:
+                members.append(m)
+
+        if not members:
+            return await ctx.send(embed=embed_msg("⚠️ Aucun membre", "Aucun membre en vocal."))
+
+        moved = 0
+        for m in members:
+            old = m.voice.channel
+            await m.move_to(target_channel)
+            last_moves[m.id] = old.id
+            moved += 1
+
+        await ctx.send(embed=embed_msg("📥 Serveur centralisé", f"{moved} membres → {format_channel(target_channel)}"))
+
+    @commands.command(name="voicekick")
+    @has_role()
+    async def voicekick(self, ctx, member: nextcord.Member = None):
+        if not member:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+voicekick @user`", 0xff0000))
+        if not member.voice:
+            return await ctx.send(embed=embed_msg("❌ Erreur", f"{member.mention} n'est pas en vocal.", 0xff0000))
+        
+        try:
+            await member.move_to(None)
+            await ctx.send(embed=embed_msg("👢 Vocal kick", f"{member.mention} expulsé du vocal."))
+        except Exception as e:
+            await ctx.send(embed=embed_msg("❌ Erreur", f"Impossible d'expulser : {str(e)}", 0xff0000))
+
+    @commands.command(name="voiceinfo")
+    @has_role()
+    async def voiceinfo(self, ctx, channel: nextcord.VoiceChannel = None):
+        if not channel:
+            if not ctx.author.voice:
+                return await ctx.send(embed=embed_msg("❌ Erreur", "Tu dois être en vocal ou spécifier un salon.", 0xff0000))
+            channel = ctx.author.voice.channel
+        
+        desc = f"**Salon :** {channel.name}\n"
+        desc += f"**Membres :** {len(channel.members)}\n"
+        desc += f"**Limite :** {channel.user_limit if channel.user_limit > 0 else 'Illimitée'}\n"
+        desc += f"**Bitrate :** {channel.bitrate // 1000}kbps\n"
+        desc += f"**Région :** {channel.region or 'Auto'}\n"
+        desc += f"\n**Membres :\n"
+        for m in channel.members[:10]:
+            desc += f"• {m.mention}\n"
+        if len(channel.members) > 10:
+            desc += f"... et {len(channel.members) - 10} autres"
+        
+        await ctx.send(embed=embed_msg(f"🔊 Info vocal", desc))
+
+    @commands.command(name="voice_limit")
+    @has_role()
+    async def voice_limit(self, ctx, channel: nextcord.VoiceChannel, limit: int):
+        if limit < 0 or limit > 99:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "La limite doit être entre 0 et 99.", 0xff0000))
+        
+        await channel.edit(user_limit=limit)
+        await ctx.send(embed=embed_msg("⚙️ Limite modifiée", f"{channel.mention} → limite: {limit if limit > 0 else 'Illimitée'}"))
+
+    @commands.command(name="voice_bitrate")
+    @has_role()
+    async def voice_bitrate(self, ctx, channel: nextcord.VoiceChannel, bitrate: int):
+        if bitrate < 8 or bitrate > 384:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Bitrate entre 8 et 384 kbps.", 0xff0000))
+        
+        await channel.edit(bitrate=bitrate * 1000)
+        await ctx.send(embed=embed_msg("🎧 Bitrate modifié", f"{channel.mention} → {bitrate}kbps"))
+
+    @commands.command(name="voice_mute_all_server")
+    @has_role()
+    async def voice_mute_all_server(self, ctx):
+        count = 0
+        for m in ctx.guild.members:
+            if m.voice:
+                try:
+                    await m.edit(mute=True)
+                    count += 1
+                except:
+                    pass
+        await ctx.send(embed=embed_msg("🔇 Mute serveur", f"{count} membres mutés."))
+
+    @commands.command(name="voice_unmute_all_server")
+    @has_role()
+    async def voice_unmute_all_server(self, ctx):
+        count = 0
+        for m in ctx.guild.members:
+            if m.voice:
+                try:
+                    await m.edit(mute=False)
+                    count += 1
+                except:
+                    pass
+        await ctx.send(embed=embed_msg("🔊 Unmute serveur", f"{count} membres démutés."))
+
+    @commands.command(name="voice_deafen_all_server")
+    @has_role()
+    async def voice_deafen_all_server(self, ctx):
+        count = 0
+        for m in ctx.guild.members:
+            if m.voice:
+                try:
+                    await m.edit(deafen=True)
+                    count += 1
+                except:
+                    pass
+        await ctx.send(embed=embed_msg("👂 Deafen serveur", f"{count} membres deafened."))
+
+    @commands.command(name="move_category_to_category")
+    @has_role()
+    async def move_category_to_category(self, ctx, source_cat_id: int, dest_cat_id: int):
+        """Déplacer tous les membres d'une catégorie à une autre (sans rééquilibrage)."""
+        src = ctx.guild.get_channel(source_cat_id)
+        dst = ctx.guild.get_channel(dest_cat_id)
+        
+        if not isinstance(src, nextcord.CategoryChannel) or not isinstance(dst, nextcord.CategoryChannel):
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Catégories invalides.", 0xff0000))
+        
+        members = []
+        for vc in src.channels:
+            if isinstance(vc, nextcord.VoiceChannel):
+                members.extend(vc.members)
+        
+        if not members:
+            return await ctx.send(embed=embed_msg("⚠️ Aucun membre", "Aucun membre dans la source."))
+        
+        # Prendre le premier salon de destination
+        dst_vcs = [c for c in dst.channels if isinstance(c, nextcord.VoiceChannel)]
+        if not dst_vcs:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Aucun salon vocal en destination.", 0xff0000))
+        
+        moved = 0
+        for m in members:
+            old = m.voice.channel
+            await m.move_to(dst_vcs[0])
+            last_moves[m.id] = old.id
+            moved += 1
+        
+        await ctx.send(embed=embed_msg("🚚 Catégorie déplacée", f"{moved} membres déplacés."))
+
+    @commands.command(name="solo_channels")
+    @has_role()
+    async def solo_channels(self, ctx, category_id: int):
+        """Créer des salons 1v1 et y assigner les gens."""
+        cat = ctx.guild.get_channel(category_id)
+        if not isinstance(cat, nextcord.CategoryChannel):
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Catégorie invalide.", 0xff0000))
+        
+        members = []
+        for vc in cat.channels:
+            if isinstance(vc, nextcord.VoiceChannel):
+                members.extend(vc.members)
+        
+        if not members:
+            return await ctx.send(embed=embed_msg("⚠️ Aucun membre", "Aucun membre à traiter."))
+        
+        # Créer des 1v1
+        for i in range(0, len(members), 2):
+            m1 = members[i]
+            m2 = members[i+1] if i+1 < len(members) else None
+            
+            name = f"1v1-{i//2+1}"
+            try:
+                vc = await ctx.guild.create_voice_channel(name, category=cat, user_limit=2)
+                await m1.move_to(vc)
+                if m2:
+                    await m2.move_to(vc)
+            except:
+                pass
+        
+        await ctx.send(embed=embed_msg("👥 1v1 créés", f"Environ {len(members)//2} duos créés."))
 
 
 def setup(bot):
