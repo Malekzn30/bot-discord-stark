@@ -30,7 +30,8 @@ COGS_TO_LOAD = [
     "cogs.moderation",
     "cogs.system",
     "cogs.logs",
-    "cogs.games"
+    "cogs.games",
+    "cogs.welcome"
 ]
 
 # ============= CONFIGURATION VOICE =============

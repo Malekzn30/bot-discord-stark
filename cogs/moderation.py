@@ -6,6 +6,7 @@ import os
 import json
 
 from cogs.logs import send_log   # ← AJOUT OBLIGATOIRE
+from utils.embeds import create_embed, create_error_embed, create_warn_embed, create_success_embed
 
 # ----- gestion des permissions de commandes -----
 COMMAND_ROLES_PATH = os.path.join(os.path.dirname(__file__), "command_roles.json")
@@ -262,20 +263,12 @@ class Moderation(commands.Cog):
     @commands.has_permissions(kick_members=True)
     async def warn(self, ctx, member: nextcord.Member = None, *, reason="Aucune raison"):
         if not member:
-            embed = nextcord.Embed(
-                title="❌ Erreur de Warn",
-                description="Veuillez mentionner un membre.",
-                color=0xff6b6b
-            )
+            embed = create_error_embed("Erreur de Warn", "Veuillez mentionner un membre.", ctx.guild, self.bot)
             await ctx.send(embed=embed)
             return
 
         if member == ctx.author:
-            embed = nextcord.Embed(
-                title="❌ Erreur de Warn",
-                description="Vous ne pouvez pas vous warn vous-même.",
-                color=0xff6b6b
-            )
+            embed = create_error_embed("Erreur de Warn", "Vous ne pouvez pas vous warn vous-même.", ctx.guild, self.bot)
             await ctx.send(embed=embed)
             return
 
@@ -286,17 +279,12 @@ class Moderation(commands.Cog):
             "SELECT COUNT(*) FROM warns WHERE user_id = ?", (member.id,)
         ).fetchone()[0]
 
-        embed = nextcord.Embed(
-            title="⚠️ Avertissement émis",
-            color=0xff6b6b,
-            timestamp=ctx.message.created_at
-        )
+        embed = create_warn_embed("Avertissement émis", "", ctx.guild, self.bot)
         embed.add_field(name="👤 Membre averti", value=member.mention, inline=False)
         embed.add_field(name="📄 Raison", value=reason, inline=False)
-        embed.add_field(name="� Modérateur", value=ctx.author.mention, inline=False)
+        embed.add_field(name="👮 Modérateur", value=ctx.author.mention, inline=False)
         embed.add_field(name="📊 Total de warns", value=f"**{warn_count}** avertissement{'s' if warn_count > 1 else ''}", inline=False)
         embed.set_thumbnail(url=member.display_avatar.url)
-        embed.set_footer(text=f"Warn émis par {ctx.author.name}", icon_url=ctx.author.display_avatar.url)
         
         await ctx.send(embed=embed)
 
@@ -324,11 +312,7 @@ class Moderation(commands.Cog):
     @commands.command(name="warnlist")
     async def warnlist(self, ctx, member: nextcord.Member = None):
         if not member:
-            embed = nextcord.Embed(
-                title="❌ Erreur",
-                description="Utilise : `+warnlist @membre`",
-                color=0xff6b6b
-            )
+            embed = create_error_embed("Erreur", "Utilise : `+warnlist @membre`", ctx.guild, self.bot)
             await ctx.send(embed=embed)
             return
 
@@ -336,20 +320,12 @@ class Moderation(commands.Cog):
         rows = self.cursor.fetchall()
 
         if not rows:
-            embed = nextcord.Embed(
-                title="✅ Aucun avertissement",
-                description=f"{member.mention} n'a aucun avertissement enregistré.",
-                color=0x2ecc71
-            )
+            embed = create_success_embed("Aucun avertissement", f"{member.mention} n'a aucun avertissement enregistré.", ctx.guild, self.bot)
             embed.set_thumbnail(url=member.display_avatar.url)
             await ctx.send(embed=embed)
             return
 
-        embed = nextcord.Embed(
-            title=f"⚠️ Liste des avertissements - {member.display_name}",
-            color=0xff6b6b,
-            timestamp=ctx.message.created_at
-        )
+        embed = create_warn_embed(f"Liste des avertissements - {member.display_name}", "", ctx.guild, self.bot)
         embed.set_thumbnail(url=member.display_avatar.url)
         
         for i, (reason, moderator_id) in enumerate(rows, 1):

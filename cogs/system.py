@@ -1,6 +1,11 @@
 import nextcord
 from nextcord.ext import commands
 import time
+import os
+import json
+from datetime import datetime
+
+from utils.embeds import create_embed, create_error_embed, create_success_embed, create_warn_embed, create_info_embed
 from cogs.moderation import COMMAND_ROLES, save_command_roles
 
 # interactive help content ---------------------------------------------------
@@ -477,30 +482,16 @@ class System(commands.Cog):
     @commands.command(name="embed")
     @commands.has_permissions(administrator=True)
     async def create_embed(self, ctx, title: str, description: str, *, footer: str = None):
-        """Créer un embed personnalisé avec icône du serveur et footer du bot
+        """Créer un embed personnalisé avec le design standard du bot
         
         Usage: +embed "Titre" "Description" "Footer optionnel"
         """
-        # Créer l'embed avec l'icône du serveur
-        embed = nextcord.Embed(
-            title=title,
-            description=description,
-            color=0x3498db,
-            timestamp=ctx.message.created_at
-        )
+        # Créer l'embed avec le design standard
+        embed = create_embed(title, description, 0x3498db, ctx.message.created_at, ctx.guild, self.bot)
         
-        # Ajouter l'icône du serveur si disponible
-        if ctx.guild.icon:
-            embed.set_thumbnail(url=ctx.guild.icon.url)
-        
-        # Ajouter le footer avec le nom du bot
+        # Ajouter le footer personnalisé si fourni
         if footer:
-            embed.set_footer(text=f"{footer} • {ctx.bot.user.name}", icon_url=ctx.bot.user.display_avatar.url)
-        else:
-            embed.set_footer(text=f"{ctx.bot.user.name}", icon_url=ctx.bot.user.display_avatar.url)
-        
-        # Ajouter l'auteur du message
-        embed.set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar.url)
+            embed.set_footer(text=f"{footer} • made by 𝐒𝐭𝐚𝐫𝐊𝟗𝟐☆🇵🇸", icon_url=self.bot.user.display_avatar.url)
         
         await ctx.send(embed=embed)
         await ctx.message.delete()  # Supprimer la commande d'origine
