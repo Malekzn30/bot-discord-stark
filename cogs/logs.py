@@ -1,23 +1,219 @@
 import nextcord
 from nextcord.ext import commands
-from datetime import datetime, timedelta
+import datetime
 import os
 import json
-import asyncio
-import logging
-import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-# ============================================================
-# SYSTÈME DE LOGS UNIFIÉ
-# ============================================================
+class Logs(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.ensure_data_directory()
 
-# Créer le dossier logs s'il n'existe pas
-LOGS_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
-os.makedirs(LOGS_DIR, exist_ok=True)
+    def ensure_data_directory(self):
+        """S'assurer que le répertoire data/logs existe"""
+        os.makedirs("data/logs", exist_ok=True)
 
-# Configuration du logging
-def setup_logging():
+    @commands.command(name="logs")
+    @commands.has_permissions(administrator=True)
+    async def logs_command(self, ctx, log_type: str = "all"):
+        """Afficher les logs du serveur"""
+        
+        log_file = f"data/logs/{ctx.guild.id}.json"
+        
+        if not os.path.exists(log_file):
+            return await ctx.send("❌ Aucun log trouvé pour ce serveur.")
+        
+        try:
+            with open(log_file, 'r', encoding='utf-8') as f:
+                logs = json.load(f)
+        except:
+            logs = []
+        
+        if not logs:
+            return await ctx.send("❌ Aucun log disponible.")
+        
+        # Filtrer par type si spécifié
+        if log_type.lower() != "all":
+            logs = [log for log in logs if log.get("type", "").lower() == log_type.lower()]
+        
+        if not logs:
+            return await ctx.send(f"❌ Aucun log de type `{log_type}` trouvé.")
+        
+        # Afficher les 20 derniers logs
+        recent_logs = logs[-20:]
+        
+        embed = nextcord.Embed(
+            title="📋 Logs du Serveur",
+            description=f"Type: {log_type if log_type != 'all' else 'Tous'}",
+            color=0x3498db,
+            timestamp=datetime.datetime.now()
+        )
+        
+        embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
+        
+        for log in recent_logs:
+            timestamp = log.get("timestamp", "")
+            action = log.get("action", "Inconnu")
+            user = log.get("user", "Inconnu")
+            details = log.get("details", "")
+            
+            # Limiter la longueur pour l'affichage
+            if len(details) > 100:
+                details = details[:97] + "..."
+            
+            embed.add_field(
+                name=f"📝 {action}",
+                value=f"**Utilisateur:** {user}\n**Détails:** {details}\n**Temps:** {timestamp}",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Total: {len(recent_logs)} logs récents")
+        await ctx.send(embed=embed)
+
+    @commands.command(name="clearlogs")
+    @commands.has_permissions(administrator=True)
+    async def clear_logs_command(self, ctx, log_type: str = "all"):
+        """Vider les logs du serveur"""
+        
+        log_file = f"data/logs/{ctx.guild.id}.json"
+        
+        if log_type.lower() == "all":
+            if os.path.exists(log_file):
+                os.remove(log_file)
+                await ctx.send("✅ Tous les logs ont été supprimés.")
+            else:
+                await ctx.send("❌ Aucun log à supprimer.")
+        else:
+            # Supprimer seulement un type spécifique
+            try:
+                with open(log_file, 'r', encoding='utf-8') as f:
+                    logs = json.load(f)
+                
+                original_count = len(logs)
+                logs = [log for log in logs if log.get("type", "").lower() != log_type.lower()]
+                
+                with open(log_file, 'w', encoding='utf-8') as f:
+                    json.dump(logs, f, indent=2, ensure_ascii=False)
+                
+                removed = original_count - len(logs)
+                await ctx.send(f"✅ {removed} logs de type `{log_type}` supprimés.")
+                
+            except FileNotFoundError:
+                await ctx.send("❌ Aucun log trouvé.")
+
+    @commands.command(name="logsettings")
+    @commands.has_permissions(administrator=True)
+    async def log_settings(self, ctx, setting: str, value: str = None):
+        """Configurer les paramètres des logs"""
+        
+        settings_file = "data/logs/settings.json"
+        
+        # Charger les paramètres actuels
+        if os.path.exists(settings_file):
+            with open(settings_file, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+        else:
+            settings = {
+                "enabled": True,
+                "log_types": ["moderation", "vocal", "messages", "errors"],
+                "max_logs": 1000,
+                "auto_cleanup": True
+            }
+        
+        if value is None:
+            # Afficher les paramètres actuels
+            embed = nextcord.Embed(
+                title="⚙️ Paramètres des Logs",
+                color=0x3498db
+            )
+            
+            for key, val in settings.items():
+                if isinstance(val, list):
+                    val = ", ".join(val)
+                embed.add_field(name=key.title(), value=str(val), inline=True)
+            
+            await ctx.send(embed=embed)
+            return
+        
+        # Modifier un paramètre
+        if setting.lower() in ["enabled", "auto_cleanup"]:
+            settings[setting.lower()] = value.lower() in ["true", "on", "1"]
+        elif setting.lower() in ["max_logs"]:
+            try:
+                settings[setting.lower()] = int(value)
+            except ValueError:
+                return await ctx.send("❌ La valeur doit être un nombre.")
+        elif setting.lower() == "log_types":
+            types = [t.strip() for t in value.split(",")]
+            settings[setting.lower()] = types
+        else:
+            return await ctx.send("❌ Paramètre inconnu.")
+        
+        # Sauvegarder les paramètres
+        with open(settings_file, 'w', encoding='utf-8') as f:
+            json.dump(settings, f, indent=2, ensure_ascii=False)
+        
+        await ctx.send(f"✅ Paramètre `{setting}` mis à jour: `{value}`")
+
+    @commands.Cog.listener()
+    async def on_command_completion(self, ctx):
+        """Logger les commandes utilisées"""
+        await self.log_action(ctx.guild, "command", f"{ctx.author.mention} a utilisé `{ctx.command}`")
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        """Logger les arrivées de membres"""
+        await self.log_action(member.guild, "member_join", f"{member.mention} a rejoint le serveur")
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member):
+        """Logger les départs de membres"""
+        await self.log_action(member.guild, "member_leave", f"{member.mention} a quitté le serveur")
+
+    async def log_action(self, guild, action_type, details):
+        """Ajouter une action aux logs"""
+        try:
+            log_file = f"data/logs/{guild.id}.json"
+            
+            # Charger les logs existants
+            if os.path.exists(log_file):
+                with open(log_file, 'r', encoding='utf-8') as f:
+                    logs = json.load(f)
+            else:
+                logs = []
+            
+            # Ajouter le nouveau log
+            new_log = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "type": action_type,
+                "action": action_type.replace("_", " ").title(),
+                "details": details,
+                "user": details.split()[0] if " " in details else "System"
+            }
+            
+            logs.append(new_log)
+            
+            # Limiter le nombre de logs
+            settings_file = "data/logs/settings.json"
+            max_logs = 1000  # Valeur par défaut
+            
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+                    max_logs = settings.get("max_logs", 1000)
+            
+            if len(logs) > max_logs:
+                logs = logs[-max_logs:]
+            
+            # Sauvegarder
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(logs, f, indent=2, ensure_ascii=False)
+                
+        except Exception as e:
+            print(f"[LOGS ERROR] {e}")
+
+def setup(bot):
+    bot.add_cog(Logs(bot))
     """Configurer le système de logs"""
     
     # Nom du fichier avec la date du jour

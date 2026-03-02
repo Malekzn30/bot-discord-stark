@@ -66,7 +66,7 @@ async def cleanup_aggressive():
 # CHARGEMENT DES COGS
 # ============================
 
-COGS = ["moderation", "system", "voice", "logs", "games", "tickets"]
+COGS = ["moderation_enhanced", "community_features", "utility_commands", "fun_commands", "extended_commands", "performance_optimizer", "voice", "social", "antimod", "system", "rolemanager", "config_panel", "help_system", "bot_customization", "logs", "games", "dm", "welcome", "tickets"]
 
 async def load_cogs_async():
     for cog in COGS:
