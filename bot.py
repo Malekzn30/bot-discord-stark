@@ -27,7 +27,7 @@ bot = commands.Bot(
     command_prefix="+",
     intents=intents,
     help_command=None,
-    chunk_guilds_at_startup=False  # ← Pas de chunking au startup
+    chunk_guilds_at_startup=False  # ← Économiser la performance sur Render
 )
 bot.start_time = time.time()
 

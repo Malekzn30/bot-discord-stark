@@ -17,20 +17,38 @@ class Welcome(commands.Cog):
         # Logger l'arrivée du membre
         log_welcome(member, "join", f"{member.guild.name} (ID: {member.guild.id})")
         
-        # Récupérer le nombre correct de membres (tous les membres, y compris les bots)
-        total_members = len(member.guild.members)
-        
-        # Récupérer le nombre de membres humains (exclut les bots)
-        human_members = len([m for m in member.guild.members if not m.bot])
+        # Utiliser le nombre de membres du serveur (plus rapide que chunking)
+        total_members = member.guild.member_count
         
         # Logger les statistiques
-        log_welcome(member, "member_count", f"Total: {total_members} | Humains: {human_members}")
+        log_welcome(member, "member_count", f"Total: {total_members}")
+        
+        # Récupérer qui a invité le membre (via audit logs)
+        inviter = "Inconnu"
+        try:
+            import asyncio
+            # Attendre un peu pour que l'audit log soit disponible
+            await asyncio.sleep(1)
+            
+            async for entry in member.guild.audit_logs(limit=5, action=nextcord.AuditLogAction.bot_add):
+                if entry.target and entry.target.id == member.id:
+                    inviter = entry.user.name
+                    break
+            
+            # Si pas trouvé dans bot_add, essayer dans member_add
+            if inviter == "Inconnu":
+                async for entry in member.guild.audit_logs(limit=5, action=nextcord.AuditLogAction.member_add):
+                    if entry.target and entry.target.id == member.id:
+                        inviter = entry.user.name
+                        break
+        except:
+            pass  # En cas d'erreur, on garde "Inconnu"
         
         try:
-            # Créer l'embed d'arrivée avec le bon comptage
+            # Créer l'embed d'arrivée simple et rapide
             embed = nextcord.Embed(
                 title=f"👋 Bienvenue {member.name} !",
-                description=f"Tu es notre **{human_members}ème** membre humain !",
+                description=f"Tu es notre **{total_members}ème** membre !",
                 color=0x3498db,
                 timestamp=member.joined_at
             )
@@ -42,11 +60,11 @@ class Welcome(commands.Cog):
                 inline=False
             )
             
-            # Ajouter les statistiques du serveur
+            # Ajouter qui a invité le membre
             embed.add_field(
-                name="📊 Statistiques",
-                value=f"👥 Total membres: **{total_members}**\n🤖 Bots: **{total_members - human_members}**\n👤 Humains: **{human_members}**",
-                inline=False
+                name="📨 Invité par",
+                value=f"**{inviter}**",
+                inline=True
             )
             
             # Thumbnail avec l'avatar du membre
