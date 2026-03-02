@@ -37,11 +37,11 @@ class Voice(commands.Cog):
     # ============================================================
     # 1) MOOVE 1 PERSONNE → 1 SALON
     # ============================================================
-    @commands.command(name="moove", aliases=["move"])
+    @commands.command(name="déplacer", aliases=["moove", "move"])
     @has_role()
-    async def moove(self, ctx, member: nextcord.Member = None, channel: nextcord.VoiceChannel = None):
+    async def deplacer(self, ctx, member: nextcord.Member = None, channel: nextcord.VoiceChannel = None):
         if not member or not channel:
-            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+moove @user #salon`", 0xff0000))
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+déplacer @user #salon`", 0xff0000))
 
         if not member.voice:
             return await ctx.send(embed=embed_msg("❌ Erreur", "Ce membre n'est pas en vocal.", 0xff0000))
@@ -688,11 +688,23 @@ class Voice(commands.Cog):
         if not channel:
             return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+lockvoice #salon`", 0xff0000))
 
+        # Récupérer les permissions actuelles
         overwrite = channel.overwrites_for(ctx.guild.default_role)
+        
+        # Modifier seulement la permission connect sans changer les autres
         overwrite.connect = False
+        
         await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
 
         await ctx.send(embed=embed_msg("🔒 Salon verrouillé", f"{format_channel(channel)} est maintenant fermé."))
+        
+        # Logger l'action
+        try:
+            from cogs.logs import log_command, log_moderation
+            log_command(ctx, "lockvoice", f"Salon vocal: {channel.name}")
+            log_moderation("lockvoice", ctx.author.name, channel.name, "Verrouillage du salon vocal")
+        except:
+            pass
 
     # ============================================================
     # UNLOCKVOICE (déverrouiller un salon vocal)
@@ -703,11 +715,23 @@ class Voice(commands.Cog):
         if not channel:
             return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+unlockvoice #salon`", 0xff0000))
 
+        # Récupérer les permissions actuelles
         overwrite = channel.overwrites_for(ctx.guild.default_role)
+        
+        # Modifier seulement la permission connect sans changer les autres
         overwrite.connect = True
+        
         await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
 
         await ctx.send(embed=embed_msg("🔓 Salon déverrouillé", f"{format_channel(channel)} est maintenant ouvert."))
+        
+        # Logger l'action
+        try:
+            from cogs.logs import log_command, log_moderation
+            log_command(ctx, "unlockvoice", f"Salon vocal: {channel.name}")
+            log_moderation("unlockvoice", ctx.author.name, channel.name, "Déverrouillage du salon vocal")
+        except:
+            pass
 
     # ============================================================
     # MUTEALL (mute tout le vocal)
@@ -1602,6 +1626,197 @@ class Voice(commands.Cog):
                 pass
         
         await ctx.send(embed=embed_msg("👥 1v1 créés", f"Environ {len(members)//2} duos créés."))
+
+    # ============================================================
+    # COMMANDES AVANCÉES D'ÉQUILIBRAGE
+    # ============================================================
+    
+    @commands.command(name="equilibrer", aliases=["balance"])
+    @has_role()
+    async def equilibrer(self, ctx, category: nextcord.CategoryChannel = None, min_par_salon: int = 2):
+        """Équilibrer les membres dans les salons d'une catégorie (2-5 membres par salon)"""
+        if not category:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+equilibrer @catégorie [2-5]`", 0xff0000))
+        
+        if min_par_salon < 2 or min_par_salon > 5:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Le minimum par salon doit être entre 2 et 5.", 0xff0000))
+        
+        # Récupérer tous les membres dans les salons vocaux de la catégorie
+        voice_channels = [c for c in category.channels if isinstance(c, nextcord.VoiceChannel)]
+        if not voice_channels:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Aucun salon vocal dans cette catégorie.", 0xff0000))
+        
+        all_members = []
+        for vc in voice_channels:
+            all_members.extend(vc.members)
+        
+        if not all_members:
+            return await ctx.send(embed=embed_msg("⚠️ Vide", "Aucun membre dans les salons de cette catégorie.", 0xff0000))
+        
+        # Calculer combien de salons nécessaires
+        total_salons_necessaires = max(1, (len(all_members) + min_par_salon - 1) // min_par_salon)
+        
+        # Si on a besoin de plus de salons qu'il n'y en a, en créer
+        while len(voice_channels) < total_salons_necessaires:
+            try:
+                new_vc = await ctx.guild.create_voice_channel(
+                    f"🔊 Équilibrage-{len(voice_channels)+1}", 
+                    category=category,
+                    user_limit=min_par_salon + 2  # Laisser un peu de marge
+                )
+                voice_channels.append(new_vc)
+            except:
+                break
+        
+        # Mélanger les membres pour une distribution aléatoire
+        random.shuffle(all_members)
+        
+        # Distribuer les membres équitablement
+        membres_par_salon = len(all_members) // len(voice_channels)
+        reste = len(all_members) % len(voice_channels)
+        
+        moved = 0
+        membre_index = 0
+        
+        for i, vc in enumerate(voice_channels):
+            # Combien de membres dans ce salon
+            membres_ce_salon = membres_par_salon + (1 if i < reste else 0)
+            
+            for j in range(membres_ce_salon):
+                if membre_index < len(all_members):
+                    member = all_members[membre_index]
+                    if member.voice.channel != vc:
+                        await member.move_to(vc)
+                        moved += 1
+                    membre_index += 1
+        
+        await ctx.send(embed=embed_msg(
+            "⚖️ Équilibrage terminé", 
+            f"**{len(all_members)}** membres distribués dans **{len(voice_channels)}** salons\n"
+            f"**{moved}** membres déplacés • **{min_par_salon}** minimum par salon"
+        ))
+        
+        # Logger
+        try:
+            from cogs.logs import log_command
+            log_command(ctx, "equilibrer", f"Catégorie: {category.name} | Membres: {len(all_members)} | Min/salon: {min_par_salon}")
+        except:
+            pass
+
+    @commands.command(name="equilibrer_auto", aliases=["auto_balance"])
+    @has_role()
+    async def equilibrer_auto(self, ctx, category: nextcord.CategoryChannel = None):
+        """Équilibrage automatique intelligent (2-3 membres par salon selon le nombre total)"""
+        if not category:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+equilibrer_auto @catégorie`", 0xff0000))
+        
+        # Récupérer tous les membres
+        voice_channels = [c for c in category.channels if isinstance(c, nextcord.VoiceChannel)]
+        if not voice_channels:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Aucun salon vocal dans cette catégorie.", 0xff0000))
+        
+        all_members = []
+        for vc in voice_channels:
+            all_members.extend(vc.members)
+        
+        if not all_members:
+            return await ctx.send(embed=embed_msg("⚠️ Vide", "Aucun membre dans les salons de cette catégorie.", 0xff0000))
+        
+        # Déterminer le nombre optimal par salon
+        total_membres = len(all_members)
+        total_salons = len(voice_channels)
+        
+        if total_membres <= 6:
+            min_par_salon = 2
+        elif total_membres <= 12:
+            min_par_salon = 3
+        elif total_membres <= 20:
+            min_par_salon = 4
+        else:
+            min_par_salon = 5
+        
+        # Appeler la fonction d'équilibrage avec le bon paramètre
+        await self.equilibrer(ctx, category, min_par_salon)
+
+    @commands.command(name="vider_salons_vides", aliases=["clear_empty"])
+    @has_role()
+    async def vider_salons_vides(self, ctx, category: nextcord.CategoryChannel = None):
+        """Supprimer les salons vocaux vides dans une catégorie"""
+        if not category:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+vider_salons_vides @catégorie`", 0xff0000))
+        
+        voice_channels = [c for c in category.channels if isinstance(c, nextcord.VoiceChannel)]
+        if not voice_channels:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Aucun salon vocal dans cette catégorie.", 0xff0000))
+        
+        deleted = 0
+        for vc in voice_channels[:]:  # Copie pour pouvoir supprimer pendant l'itération
+            if len(vc.members) == 0 and vc.name.startswith("🔊 Équilibrage-"):
+                try:
+                    await vc.delete()
+                    deleted += 1
+                except:
+                    pass
+        
+        await ctx.send(embed=embed_msg(
+            "🧹 Nettoyage terminé", 
+            f"**{deleted}** salons vocaux vides supprimés"
+        ))
+
+    @commands.command(name="stats_vocal", aliases=["voice_stats"])
+    @has_role()
+    async def stats_vocal(self, ctx, category: nextcord.CategoryChannel = None):
+        """Afficher les statistiques vocales d'une catégorie"""
+        if not category:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+stats_vocal @catégorie`", 0xff0000))
+        
+        voice_channels = [c for c in category.channels if isinstance(c, nextcord.VoiceChannel)]
+        if not voice_channels:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Aucun salon vocal dans cette catégorie.", 0xff0000))
+        
+        total_membres = 0
+        stats = []
+        
+        for vc in voice_channels:
+            membres_count = len(vc.members)
+            total_membres += membres_count
+            stats.append(f"🔊 **{vc.name}**: {membres_count} membres")
+        
+        embed = nextcord.Embed(
+            title=f"📊 Statistiques vocales - {category.name}",
+            description=f"**{len(voice_channels)}** salons • **{total_membres}** membres totaux",
+            color=0x3498db
+        )
+        
+        # Ajouter les stats par salon
+        if stats:
+            embed.add_field(name="📋 Par salon", value="\n".join(stats), inline=False)
+        
+        # Ajouter la moyenne
+        moyenne = total_membres / len(voice_channels) if voice_channels else 0
+        embed.add_field(
+            name="📈 Moyenne", 
+            value=f"**{moyenne:.1f}** membres par salon", 
+            inline=True
+        )
+        
+        embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
+        embed.set_footer(text=f"Demandé par {ctx.author.name}")
+        
+        await ctx.send(embed=embed)
+
+    @commands.command(name="optimiser_vocal", aliases=["optimize_voice"])
+    @has_role()
+    async def optimiser_vocal(self, ctx, category: nextcord.CategoryChannel = None):
+        """Optimiser automatiquement la distribution vocale"""
+        if not category:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+optimiser_vocal @catégorie`", 0xff0000))
+        
+        # D'abord montrer les stats actuelles
+        await self.stats_vocal(ctx, category)
+        
+        # Puis équilibrer automatiquement
+        await self.equilibrer_auto(ctx, category)
 
 
 def setup(bot):

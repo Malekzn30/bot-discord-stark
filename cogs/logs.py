@@ -474,12 +474,12 @@ class LogsConfig(commands.Cog):
     @commands.command(name="logs_setup")
     @commands.has_permissions(administrator=True)
     async def logs_setup_interactive(self, ctx):
-        """Configuration interactive des logs avec boutons et menu déroulant"""
+        """Configuration interactive des logs avec menu sélecteur et configuration multiple"""
         
         # Créer l'embed principal
         embed = nextcord.Embed(
             title="🔧 Configuration des Logs",
-            description="Configure facilement les logs avec ce menu interactif !",
+            description="Configure facilement les logs avec ce menu interactif !\n\n**Étapes :**\n1. Sélectionne une catégorie dans le menu\n2. Envoie le salon (#salon) dans le chat\n3. Confirme avec ✅ ou ajoute une autre catégorie avec ➕",
             color=0x3498db
         )
         
@@ -498,15 +498,6 @@ class LogsConfig(commands.Cog):
                   "🤖 `automod` - Modération automatique\n"
                   "📊 `system` - Événements système\n"
                   "🎉 `join` - Nouveaux membres",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🎯 Comment utiliser",
-            value="1. Sélectionne une catégorie dans le menu\n"
-                  "2. Choisis un channel avec les boutons\n"
-                  "3. Confirme avec le bouton ✅\n"
-                  "4. Les logs sont automatiquement sauvegardés !",
             inline=False
         )
         
@@ -597,97 +588,70 @@ class LogsConfig(commands.Cog):
             ]
         )
         
-        # Créer les vues pour les channels
-        class LogsView(nextcord.ui.View):
+        # Créer la vue pour la configuration
+        class LogsSetupView(nextcord.ui.View):
             def __init__(self):
-                super().__init__(timeout=180)  # 3 minutes
+                super().__init__(timeout=300)  # 5 minutes
                 self.selected_category = None
-                self.selected_channel = None
+                self.configured_categories = []  # Liste des catégories configurées
+                self.waiting_for_channel = False
+                self.message = None
                 
             async def select_callback(self, interaction: nextcord.Interaction, select: nextcord.ui.Select):
                 self.selected_category = select.values[0]
+                self.waiting_for_channel = True
                 
-                # Mettre à jour l'embed pour montrer la sélection
+                # Mettre à jour l'embed pour demander le salon
                 new_embed = interaction.message.embeds[0]
-                new_embed.description = f"🔍 **Catégorie sélectionnée :** `{self.selected_category}`\n\nMaintenant choisis un channel ci-dessous :"
-                
-                # Activer les boutons de channels
-                for child in self.children:
-                    if isinstance(child, nextcord.ui.Button) and child.custom_id.startswith("channel_"):
-                        child.disabled = False
+                new_embed.description = f"🔍 **Catégorie sélectionnée :** `{self.selected_category}`\n\n**Envoie maintenant le salon (#salon) dans le chat**\n\n*Exemple : #logs*"
                 
                 await interaction.response.edit_message(embed=new_embed, view=self)
             
-            @nextcord.ui.button(label="#général", style=nextcord.ButtonStyle.secondary, custom_id="channel_general", disabled=True)
-            async def general_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-                channel = nextcord.utils.get(ctx.guild.text_channels, name="général")
-                if channel:
-                    self.selected_channel = channel
-                    button.style = nextcord.ButtonStyle.success
-                    button.disabled = True
-                    # Désactiver les autres boutons
-                    for child in self.children:
-                        if isinstance(child, nextcord.ui.Button) and child.custom_id != button.custom_id:
-                            child.disabled = True
-                    await interaction.response.edit_message(view=self)
-                else:
-                    await interaction.response.send_message("❌ Channel #général introuvable", ephemeral=True)
-            
-            @nextcord.ui.button(label="#logs", style=nextcord.ButtonStyle.secondary, custom_id="channel_logs", disabled=True)
-            async def logs_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-                channel = nextcord.utils.get(ctx.guild.text_channels, name="logs")
-                if channel:
-                    self.selected_channel = channel
-                    button.style = nextcord.ButtonStyle.success
-                    button.disabled = True
-                    # Désactiver les autres boutons
-                    for child in self.children:
-                        if isinstance(child, nextcord.ui.Button) and child.custom_id != button.custom_id:
-                            child.disabled = True
-                    await interaction.response.edit_message(view=self)
-                else:
-                    await interaction.response.send_message("❌ Channel #logs introuvable", ephemeral=True)
-            
-            @nextcord.ui.button(label="#modération", style=nextcord.ButtonStyle.secondary, custom_id="channel_moderation", disabled=True)
-            async def moderation_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-                channel = nextcord.utils.get(ctx.guild.text_channels, name="modération")
-                if channel:
-                    self.selected_channel = channel
-                    button.style = nextcord.ButtonStyle.success
-                    button.disabled = True
-                    # Désactiver les autres boutons
-                    for child in self.children:
-                        if isinstance(child, nextcord.ui.Button) and child.custom_id != button.custom_id:
-                            child.disabled = True
-                    await interaction.response.edit_message(view=self)
-                else:
-                    await interaction.response.send_message("❌ Channel #modération introuvable", ephemeral=True)
-            
             @nextcord.ui.button(label="✅ Confirmer", style=nextcord.ButtonStyle.success, custom_id="confirm", disabled=True)
             async def confirm_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-                if self.selected_category and self.selected_channel:
-                    # Sauvegarder la configuration
-                    LOG_CHANNELS[self.selected_category] = self.selected_channel.id
-                    save_config(LOG_CHANNELS)
-                    
-                    # Envoyer la confirmation
-                    confirm_embed = nextcord.Embed(
-                        title="✅ Configuration enregistrée !",
-                        description=f"Les logs **{self.selected_category}** seront envoyés dans {self.selected_channel.mention}",
-                        color=0x2ECC71
-                    )
-                    confirm_embed.add_field(
-                        name="📊 Résumé",
-                        value=f"📂 Catégorie : `{self.selected_category}`\n"
-                              f"📝 Channel : {self.selected_channel.mention}\n"
-                              f"💾 Sauvegardé : ✅",
-                        inline=False
-                    )
-                    confirm_embed.set_footer(text="Utilise `+logs_status` pour voir toute ta configuration")
-                    
-                    await interaction.response.edit_message(embed=confirm_embed, view=None)
-                else:
-                    await interaction.response.send_message("❌ Veuillez sélectionner une catégorie et un channel", ephemeral=True)
+                # Sauvegarder toutes les configurations
+                saved_count = 0
+                for category, channel_id in self.configured_categories:
+                    LOG_CHANNELS[category] = channel_id
+                    saved_count += 1
+                
+                save_config(LOG_CHANNELS)
+                
+                # Envoyer la confirmation
+                confirm_embed = nextcord.Embed(
+                    title="✅ Configuration enregistrée !",
+                    description=f"**{saved_count}** catégories de logs configurées avec succès !",
+                    color=0x2ECC71
+                )
+                
+                # Lister toutes les configurations
+                for category, channel_id in self.configured_categories:
+                    channel = ctx.guild.get_channel(channel_id)
+                    if channel:
+                        icon = CATEGORY_ICONS.get(category, "📄")
+                        confirm_embed.add_field(
+                            name=f"{icon} {category.title()}",
+                            value=f"📝 {channel.mention}",
+                            inline=True
+                        )
+                
+                confirm_embed.set_footer(text="Utilise `+logs_status` pour voir toute ta configuration")
+                
+                await interaction.response.edit_message(embed=confirm_embed, view=None)
+            
+            @nextcord.ui.button(label="➕ Ajouter une autre", style=nextcord.ButtonStyle.secondary, custom_id="add_more", disabled=True)
+            async def add_more_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+                # Réinitialiser pour ajouter une autre catégorie
+                self.selected_category = None
+                self.waiting_for_channel = False
+                button.disabled = True
+                self.children[0].disabled = False  # Réactiver le select
+                
+                # Mettre à jour l'embed
+                new_embed = interaction.message.embeds[0]
+                new_embed.description = "🔧 **Ajoute une autre catégorie de logs !**\n\n1. Sélectionne une catégorie dans le menu\n2. Envoie le salon (#salon) dans le chat\n3. Confirme avec ✅ ou ajoute une autre catégorie avec ➕"
+                
+                await interaction.response.edit_message(embed=new_embed, view=self)
             
             @nextcord.ui.button(label="❌ Annuler", style=nextcord.ButtonStyle.danger, custom_id="cancel")
             async def cancel_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
@@ -699,13 +663,66 @@ class LogsConfig(commands.Cog):
                 await interaction.response.edit_message(embed=cancel_embed, view=None)
         
         # Assigner le callback au select
-        select.callback = lambda interaction: LogsView.select_callback(None, interaction, select)
+        view = LogsSetupView()
+        select.callback = lambda interaction: view.select_callback(interaction, select)
         
-        # Créer la vue et ajouter le select
-        view = LogsView()
+        # Ajouter le select à la vue
         view.add_item(select)
         
-        await ctx.send(embed=embed, view=view)
+        # Envoyer le message initial
+        message = await ctx.send(embed=embed, view=view)
+        view.message = message
+        
+        # Écouter les messages pour le salon
+        def check_channel(msg):
+            return msg.author == ctx.author and msg.channel == ctx.channel and view.waiting_for_channel
+        
+        while not view.is_finished():
+            try:
+                msg = await ctx.bot.wait_for("message", timeout=300.0, check=check_channel)
+                
+                if view.waiting_for_channel and view.selected_category:
+                    # Parser le salon depuis le message
+                    if msg.channel_mentions:
+                        channel = msg.channel_mentions[0]
+                        
+                        # Ajouter à la liste des configurations
+                        view.configured_categories.append((view.selected_category, channel.id))
+                        
+                        # Mettre à jour l'embed
+                        current_embed = view.message.embeds[0]
+                        
+                        # Ajouter la catégorie configurée à la description
+                        icon = CATEGORY_ICONS.get(view.selected_category, "📄")
+                        current_embed.description += f"\n✅ **{icon} {view.selected_category.title()}** → {channel.mention}"
+                        
+                        # Réinitialiser pour la prochaine sélection
+                        view.selected_category = None
+                        view.waiting_for_channel = False
+                        
+                        # Activer les boutons appropriés
+                        view.children[0].disabled = False  # Réactiver le select
+                        view.children[1].disabled = False  # Activer confirmer
+                        view.children[2].disabled = False  # Activer ajouter une autre
+                        
+                        await view.message.edit(embed=current_embed, view=view)
+                        
+                        # Supprimer le message de l'utilisateur
+                        await msg.delete()
+                        
+                    else:
+                        await ctx.send("❌ Veuillez mentionner un salon valide (ex: #logs)", delete_after=5)
+                        await msg.delete()
+                        
+            except asyncio.TimeoutError:
+                if not view.is_finished():
+                    timeout_embed = nextcord.Embed(
+                        title="⏰ Temps écoulé",
+                        description="La configuration a été annulée pour inactivité.",
+                        color=0xE74C3C
+                    )
+                    await view.message.edit(embed=timeout_embed, view=None)
+                break
 
     # ------------------------------------------------------------
     # /logs reset <catégorie>

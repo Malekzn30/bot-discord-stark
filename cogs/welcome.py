@@ -60,13 +60,6 @@ class Welcome(commands.Cog):
                 inline=False
             )
             
-            # Ajouter qui a invité le membre
-            embed.add_field(
-                name="📨 Invité par",
-                value=f"**{inviter}**",
-                inline=True
-            )
-            
             # Thumbnail avec l'avatar du membre
             embed.set_thumbnail(url=member.display_avatar.url)
             
@@ -82,9 +75,9 @@ class Welcome(commands.Cog):
                 icon_url=self.bot.user.display_avatar.url if self.bot.user.avatar else None
             )
             
-            # Icône du serveur comme thumbnail principale
+            # Image principale : photo de profil du serveur
             if member.guild.icon:
-                embed.set_thumbnail(url=member.guild.icon.url)
+                embed.set_image(url=member.guild.icon.url)
             
             # Envoyer dans le channel général (ou un channel de bienvenue configuré)
             welcome_channel_id = 1469768104786657534  # ID du channel de bienvenue

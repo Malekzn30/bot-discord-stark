@@ -57,7 +57,9 @@ class Games(commands.Cog):
 
         # lock channel for countdown
         try:
-            await channel.set_permissions(ctx.guild.default_role, send_messages=False)
+            current_perms = channel.overwrites_for(ctx.guild.default_role)
+            current_perms.send_messages = False
+            await channel.set_permissions(ctx.guild.default_role, overwrite=current_perms)
         except Exception:
             pass
 
@@ -74,7 +76,9 @@ class Games(commands.Cog):
 
         # unlock channel to allow guesses
         try:
-            await channel.set_permissions(ctx.guild.default_role, send_messages=True)
+            current_perms = channel.overwrites_for(ctx.guild.default_role)
+            current_perms.send_messages = True
+            await channel.set_permissions(ctx.guild.default_role, overwrite=current_perms)
         except Exception:
             pass
 
@@ -160,7 +164,9 @@ class Games(commands.Cog):
             # announce and lock the channel; require +unlock to reopen
             await message.channel.send(f"✅ {message.author.mention} a trouvé le nombre **{game['number']}** ! Le salon est verrouillé. Utilisez `+unlock` pour déverrouiller.")
             try:
-                await message.channel.set_permissions(message.guild.default_role, send_messages=False)
+                current_perms = message.channel.overwrites_for(message.guild.default_role)
+                current_perms.send_messages = False
+                await message.channel.set_permissions(message.guild.default_role, overwrite=current_perms)
             except Exception:
                 pass
             del active_games[cid]

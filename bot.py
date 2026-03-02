@@ -65,7 +65,7 @@ async def cleanup_aggressive():
         print(f"[GC] Erreur: {e}")
 
 def load_cogs():
-    cogs_to_load = ['moderation', 'system', 'voice', 'logs', 'games', 'welcome']
+    cogs_to_load = ['moderation', 'system', 'voice', 'logs', 'games', 'welcome', 'dm']
     print(f"[DEBUG] Tentative de chargement des cogs: {cogs_to_load}")
     
     for cog in cogs_to_load:

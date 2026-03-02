@@ -221,7 +221,10 @@ class Moderation(commands.Cog):
         if not role:
             role = await ctx.guild.create_role(name="Muted")
             for channel in ctx.guild.channels:
-                await channel.set_permissions(role, speak=False, send_messages=False)
+                current_perms = channel.overwrites_for(role)
+                current_perms.speak = False
+                current_perms.send_messages = False
+                await channel.set_permissions(role, overwrite=current_perms)
 
         await member.add_roles(role)
         await ctx.send(f"🔇 {member.mention} mute.\n📄 Raison : {reason}")
@@ -425,13 +428,37 @@ class Moderation(commands.Cog):
     # ============================================================
     @commands.command(name="lock")
     async def lock(self, ctx):
-        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False)
+        # Récupérer les permissions actuelles du rôle par défaut
+        current_perms = ctx.channel.overwrites_for(ctx.guild.default_role)
+        
+        # Modifier seulement la permission send_messages sans changer les autres
+        current_perms.send_messages = False
+        
+        # Appliquer les permissions modifiées
+        await ctx.channel.set_permissions(ctx.guild.default_role, overwrite=current_perms)
+        
         await ctx.send("🔒 Salon verrouillé.")
+        
+        # Logger l'action
+        log_command(ctx, "lock", f"Salon: {ctx.channel.name}")
+        log_moderation("lock", ctx.author.name, ctx.channel.name, "Verrouillage du salon")
 
     @commands.command(name="unlock")
     async def unlock(self, ctx):
-        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=True)
+        # Récupérer les permissions actuelles du rôle par défaut
+        current_perms = ctx.channel.overwrites_for(ctx.guild.default_role)
+        
+        # Modifier seulement la permission send_messages sans changer les autres
+        current_perms.send_messages = True
+        
+        # Appliquer les permissions modifiées
+        await ctx.channel.set_permissions(ctx.guild.default_role, overwrite=current_perms)
+        
         await ctx.send("🔓 Salon déverrouillé.")
+        
+        # Logger l'action
+        log_command(ctx, "unlock", f"Salon: {ctx.channel.name}")
+        log_moderation("unlock", ctx.author.name, ctx.channel.name, "Déverrouillage du salon")
 
     # ============================================================
     # SLOWMODE
