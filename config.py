@@ -25,16 +25,21 @@ UTILS_DIR = os.path.join(BASE_DIR, "utils")
 COGS_DIR = os.path.join(BASE_DIR, "cogs")
 
 # ============= COGS À CHARGER =============
-COGS_TO_LOAD = [
-    "cogs.voice", 
-    "cogs.moderation",
-    "cogs.system",
-    "cogs.logs",
-    "cogs.games",
-    "cogs.welcome",
-    "cogs.dm",
+cogs = [
+    "cogs.moderation_enhanced",
+    "cogs.community_features", 
+    "cogs.utility_commands",
+    "cogs.fun_commands",
+    "cogs.extended_commands",
+    "cogs.performance_optimizer",
+    "cogs.vocal",
     "cogs.social",
-    "cogs.rolemanager"
+    "cogs.antimod",
+    "cogs.system",
+    "cogs.rolemanager",
+    "cogs.config_panel",
+    "cogs.help_system",
+    "cogs.bot_customization"
 ]
 
 # ============= CONFIGURATION VOICE =============
