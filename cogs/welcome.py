@@ -96,7 +96,13 @@ class Welcome(commands.Cog):
             log_welcome(member, "dm_attempt")
             
             # Créer le lien d'invitation (illimité et n'expire pas)
-            invite = await member.guild.create_invite(max_uses=0, max_age=0, unique=False)
+            # Il faut utiliser un channel textuel pour créer une invitation
+            text_channels = [ch for ch in member.guild.text_channels if ch.permissions_for(member.guild.me).create_instant_invite]
+            if not text_channels:
+                log_welcome(member, "dm_error", "Aucun channel textuel disponible pour créer une invitation")
+                return
+            
+            invite = await text_channels[0].create_invite(max_uses=0, max_age=0, unique=False)
             log_welcome(member, "invite_created", invite.url)
             
             # Envoyer un message normal (pas un embed)

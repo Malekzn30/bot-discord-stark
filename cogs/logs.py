@@ -264,19 +264,19 @@ class LogsModeration(commands.Cog):
     # TIMEOUT / UNTIMEOUT (détecté automatiquement)
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
-        if before.timed_out == after.timed_out:
+        if before.timeout == after.timeout:
             return
 
-        if after.timed_out:
+        if after.timeout:
             # TIMEOUT APPLIQUÉ
             entry = await get_audit_entry(after.guild, nextcord.AuditLogAction.member_update, after.id)
             await send_log(
                 self.bot,
-                "moderation",
+                "timeout",
                 "TIMEOUT APPLIQUÉ",
                 {
                     "Membre": f"{after} (ID: {after.id})",
-                    "Durée": str(after.timed_out_until - datetime.utcnow()) if after.timed_out_until else "Indéfini",
+                    "Durée": str(after.timeout_until - datetime.utcnow()) if after.timeout_until else "Indéfini",
                     "Modérateur": entry.user if entry else "Inconnu"
                 },
                 audit_id=entry.id if entry else None
