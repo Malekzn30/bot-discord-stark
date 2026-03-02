@@ -11,7 +11,7 @@ import gc
 
 # Charger les variables d'environnement
 load_dotenv()
-TOKEN = os.getenv("TOKEN")
+TOKEN = os.getenv("DISCORD_TOKEN")
 
 # ============================
 # DISCORD BOT - OPTIMISÉ RENDER

@@ -13,7 +13,7 @@ services:
         value: "1"
       - key: PYTHONDONTWRITEBYTECODE
         value: "1"
-      - key: TOKEN
+      - key: DISCORD_TOKEN
         sync: false
 
   # Configuration du service
