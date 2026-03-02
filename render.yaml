@@ -1,0 +1,28 @@
+# ============= CONFIGURATION RENDER POUR BOT STARK =============
+
+services:
+  # Service principal du bot
+  - type: web
+    name: bot-stark
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PYTHONDONTWRITEBYTECODE
+        value: "1"
+      - key: TOKEN
+        sync: false
+
+  # Configuration du service
+  healthCheckPath: /
+  autoDeploy: true
+  region: oregon
+  
+  # Optimisations pour le plan gratuit
+  disk:
+    name: bot-stark-disk
+    sizeGB: 1
+    mountPath: /app/data

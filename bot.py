@@ -86,15 +86,13 @@ async def cleanup_aggressive():
 
 async def load_cogs_optimized():
     """Charger les cogs avec gestion d'erreur et optimisation"""
-    cogs_to_load = ['moderation', 'system', 'voice', 'logs', 'games', 'welcome', 'dm', 'social', 'antimod', 'rolemanager']
-    
-    for cog in cogs_to_load:
+    for cog in cogs:
         try:
             # Nettoyage mémoire avant chaque chargement
             if OPTIMIZATION_ENABLED:
                 gc.collect()
             
-            bot.load_extension(f"cogs.{cog}")
+            bot.load_extension(cog)
             print(f"[+] Cog chargé : {cog}")
             
             # Petite pause pour éviter le surchargement
