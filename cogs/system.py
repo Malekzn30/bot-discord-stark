@@ -170,6 +170,51 @@ class System(commands.Cog):
                 "usage": "+rps <rock|paper|scissors>",
                 "exemple": "+rps rock",
                 "permissions": "Tout le monde"
+            },
+            # Commandes sociales
+            "live": {
+                "description": "Annoncer que tu es en live sur TikTok.",
+                "usage": "+live [message]",
+                "exemple": "+live \"Je suis en live ! Venez nombreux !\"",
+                "permissions": "Rôle autorisé"
+            },
+            "stoplive": {
+                "description": "Arrêter le live et retirer le rôle.",
+                "usage": "+stoplive",
+                "exemple": "+stoplive",
+                "permissions": "Rôle autorisé"
+            },
+            "finduser": {
+                "description": "Chercher des utilisateurs par pseudo.",
+                "usage": "+finduser <pseudo>",
+                "exemple": "+finduser laz",
+                "permissions": "Tout le monde"
+            },
+            "find": {
+                "description": "Chercher des messages dans le serveur.",
+                "usage": "+find <texte/lettre/chiffre>",
+                "exemple": "+find \"message important\"",
+                "permissions": "Tout le monde"
+            },
+            # Commandes anti-modération
+            "whitelist": {
+                "description": "Gérer la whitelist des domaines autorisés.",
+                "usage": "+whitelist <list|add|remove|clear> [domaine]",
+                "exemple": "+whitelist add example.com",
+                "permissions": "Rôle autorisé"
+            },
+            # Commandes de gestion des rôles
+            "roles": {
+                "description": "Gérer les rôles autorisés à utiliser les commandes.",
+                "usage": "+roles <list|add|remove|info> [@rôle]",
+                "exemple": "+roles add @Modérateur",
+                "permissions": "Rôle autorisé"
+            },
+            "checkperms": {
+                "description": "Vérifier les permissions d'un membre.",
+                "usage": "+checkperms [@membre]",
+                "exemple": "+checkperms @User",
+                "permissions": "Tout le monde"
             }
         }
         
@@ -217,9 +262,12 @@ class System(commands.Cog):
         categories = {
             "🛡️ Modération": ["warn", "kick", "ban", "tempban", "mute", "timeout", "clear", "lock", "unlock"],
             "📊 Logs & Administration": ["logs_setup", "logs_status", "embed", "ping"],
-            "🎤 Vocal & Équilibrage": ["déplacer", "equilibrer", "equilibrer_auto", "stats_vocal", "optimiser_vocal"],
+            "🎤 Vocal & Équilibrage": ["déplacer", "equilibrer", "equilibrer_auto", "stats_vocal", "optimiser_vocal", "immobiles", "force_move", "move_all_except", "move_from_category", "shuffle_category", "gather_all", "create_voice_rooms", "clone_voice_channel", "swap_channels", "voice_activity", "move_afk", "voice_backup", "voice_restore", "voice_limits", "voice_cleanup"],
             "📬 Messages & Communication": ["dmall", "dmtest"],
-            "🎮 Jeux & Divertissement": ["devinelenombre", "dice", "coin", "rps"]
+            "🎮 Jeux & Divertissement": ["devinelenombre", "dice", "coin", "rps"],
+            "📱 Social & Recherche": ["live", "stoplive", "finduser", "find"],
+            "🔒 Anti-modération": ["whitelist"],
+            "🔐 Gestion des rôles": ["roles", "checkperms"]
         }
         
         embed = nextcord.Embed(
@@ -251,12 +299,34 @@ class System(commands.Cog):
                     "equilibrer_auto": "Équilibrage automatique",
                     "stats_vocal": "Statistiques vocales",
                     "optimiser_vocal": "Optimiser les salons vocaux",
+                    "immobiles": "Lister les membres immobiles",
+                    "force_move": "Forcer le déplacement",
+                    "move_all_except": "Déplacer tous sauf un",
+                    "move_from_category": "Déplacer depuis catégorie",
+                    "shuffle_category": "Mélanger catégorie",
+                    "gather_all": "Rassembler tout le monde",
+                    "create_voice_rooms": "Créer des salons vocaux",
+                    "clone_voice_channel": "Cloner un salon vocal",
+                    "swap_channels": "Échanger les salons",
+                    "voice_activity": "Activité vocale détaillée",
+                    "move_afk": "Déplacer les AFK",
+                    "voice_backup": "Sauvegarder distribution vocale",
+                    "voice_restore": "Restaurer distribution vocale",
+                    "voice_limits": "Gérer limites de salon",
+                    "voice_cleanup": "Nettoyer les salons vocaux",
                     "dmall": "Envoyer un DM massif",
                     "dmtest": "Tester un DM",
                     "devinelenombre": "Jeu de devinette",
                     "dice": "Lancer un dé",
                     "coin": "Pile ou face",
-                    "rps": "Pierre feuille ciseaux"
+                    "rps": "Pierre feuille ciseaux",
+                    "live": "Annoncer un live TikTok",
+                    "stoplive": "Arrêter le live",
+                    "finduser": "Chercher un utilisateur",
+                    "find": "Chercher des messages",
+                    "whitelist": "Gérer les domaines autorisés",
+                    "roles": "Gérer les rôles autorisés",
+                    "checkperms": "Vérifier les permissions"
                 }
                 
                 desc = descriptions.get(cmd, "Description non disponible")

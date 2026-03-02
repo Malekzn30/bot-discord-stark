@@ -1763,60 +1763,1023 @@ class Voice(commands.Cog):
             f"**{deleted}** salons vocaux vides supprimés"
         ))
 
-    @commands.command(name="stats_vocal", aliases=["voice_stats"])
+    @commands.command(name="immobiles")
     @has_role()
-    async def stats_vocal(self, ctx, category: nextcord.CategoryChannel = None):
-        """Afficher les statistiques vocales d'une catégorie"""
-        if not category:
-            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+stats_vocal @catégorie`", 0xff0000))
+    async def list_immobiles(self, ctx):
+        """Lister les membres qui ne peuvent pas être déplacés"""
         
-        voice_channels = [c for c in category.channels if isinstance(c, nextcord.VoiceChannel)]
-        if not voice_channels:
-            return await ctx.send(embed=embed_msg("❌ Erreur", "Aucun salon vocal dans cette catégorie.", 0xff0000))
+        immobiles = []
         
-        total_membres = 0
-        stats = []
+        for member in ctx.guild.members:
+            if not member.voice:
+                continue
+                
+            # Vérifier si le membre peut être déplacé
+            try:
+                # Vérifier les permissions du bot
+                channel = member.voice.channel
+                if not channel.permissions_for(ctx.guild.me).move_members:
+                    continue
+                
+                # Vérifier si le membre a des restrictions
+                can_move = True
+                
+                # Vérifier si le membre est dans un canal privé
+                overwrites = channel.overwrites_for(ctx.guild.default_role)
+                if overwrites.connect is False:
+                    can_move = False
+                
+                # Vérifier les permissions spécifiques du membre
+                member_overwrites = channel.overwrites_for(member)
+                if member_overwrites.connect is False:
+                    can_move = False
+                
+                if not can_move:
+                    immobiles.append(member)
+                    
+            except:
+                continue
         
-        for vc in voice_channels:
-            membres_count = len(vc.members)
-            total_membres += membres_count
-            stats.append(f"🔊 **{vc.name}**: {membres_count} membres")
+        if not immobiles:
+            embed = nextcord.Embed(
+                title="✅ Aucun membre immobile",
+                description="Tous les membres en vocal peuvent être déplacés",
+                color=0x2ECC71
+            )
+            return await ctx.send(embed=embed)
         
         embed = nextcord.Embed(
-            title=f"📊 Statistiques vocales - {category.name}",
-            description=f"**{len(voice_channels)}** salons • **{total_membres}** membres totaux",
+            title="🔒 Membres immobiles",
+            description=f"**{len(immobiles)}** membre(s) ne peuvent pas être déplacés",
+            color=0xE74C3C
+        )
+        
+        for i, member in enumerate(immobiles[:15]):  # Limiter à 15 pour éviter les embeds trop longs
+            channel = member.voice.channel
+            reason = "Permissions insuffisantes"
+            
+            # Détecter la raison spécifique
+            try:
+                overwrites = channel.overwrites_for(ctx.guild.me)
+                if not overwrites.move_members:
+                    reason = "Bot sans permission move_members"
+                else:
+                    overwrites = channel.overwrites_for(ctx.guild.default_role)
+                    if overwrites.connect is False:
+                        reason = "Salon privé (connect: False)"
+                    else:
+                        overwrites = channel.overwrites_for(member)
+                        if overwrites.connect is False:
+                            reason = "Permissions personnelles (connect: False)"
+            except:
+                reason = "Erreur de vérification"
+            
+            embed.add_field(
+                name=f"{i+1}. {member.display_name}",
+                value=f"📍 {channel.mention}\n🔒 {reason}",
+                inline=False
+            )
+        
+        if len(immobiles) > 15:
+            embed.add_field(
+                name="📊 Plus de membres",
+                value=f"Et {len(immobiles) - 15} autre(s) membre(s) immobile(s)",
+                inline=False
+            )
+        
+        embed.set_footer(text="Utilise +force_move pour tenter de déplacer malgré les restrictions")
+        await ctx.send(embed=embed)
+
+    @commands.command(name="force_move")
+    @has_role()
+    async def force_move(self, ctx, member: nextcord.Member, *, channel: nextcord.VoiceChannel = None):
+        """Tenter de déplacer un membre même avec des restrictions"""
+        
+        if not channel:
+            return await ctx.send("❌ Veuillez spécifier un salon vocal")
+        
+        if not member.voice:
+            return await ctx.send("❌ Le membre n'est pas en vocal")
+        
+        embed = nextcord.Embed(
+            title="🔄 Tentative de déplacement forcée",
+            description=f"Tentative de déplacer {member.mention} vers {channel.mention}",
+            color=0xF39C12
+        )
+        
+        # Analyser les restrictions
+        restrictions = []
+        
+        try:
+            # Vérifier les permissions du bot
+            if not channel.permissions_for(ctx.guild.me).move_members:
+                restrictions.append("❌ Bot sans permission move_members")
+            
+            # Vérifier les permissions du salon
+            overwrites = channel.overwrites_for(ctx.guild.default_role)
+            if overwrites.connect is False:
+                restrictions.append("❌ Salon privé (connect: False)")
+            
+            # Vérifier les permissions du membre
+            member_overwrites = channel.overwrites_for(member)
+            if member_overwrites.connect is False:
+                restrictions.append("❌ Permissions personnelles (connect: False)")
+            
+            if restrictions:
+                embed.add_field(
+                    name="🔒 Restrictions détectées",
+                    value="\n".join(restrictions),
+                    inline=False
+                )
+                embed.add_field(
+                    name="⚠️ Risque d'échec",
+                    value="La déplacement échouera probablement à cause des restrictions.",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="✅ Aucune restriction",
+                    value="Le déplacement devrait réussir.",
+                    inline=False
+                )
+            
+            embed.set_footer(text="Tentative de déplacement dans 3 secondes...")
+            await ctx.send(embed=embed)
+            
+            # Attendre 3 secondes avant de tenter
+            await asyncio.sleep(3)
+            
+            # Tenter le déplacement
+            try:
+                await member.move_to(channel)
+                
+                success_embed = nextcord.Embed(
+                    title="✅ Déplacement réussi !",
+                    description=f"{member.mention} a été déplacé vers {channel.mention}",
+                    color=0x2ECC71
+                )
+                await ctx.send(embed=success_embed)
+                
+            except nextcord.Forbidden:
+                error_embed = nextcord.Embed(
+                    title="❌ Déplacement échoué",
+                    description="Permissions insuffisantes pour déplacer ce membre.",
+                    color=0xE74C3C
+                )
+                await ctx.send(embed=error_embed)
+                
+            except Exception as e:
+                error_embed = nextcord.Embed(
+                    title="❌ Erreur inattendue",
+                    description=f"Erreur lors du déplacement: {str(e)}",
+                    color=0xE74C3C
+                )
+                await ctx.send(embed=error_embed)
+                
+        except Exception as e:
+            await ctx.send(f"❌ Erreur lors de l'analyse: {e}")
+
+    @commands.command(name="move_all_except")
+    @has_role()
+    async def move_all_except(self, ctx, except_member: nextcord.Member, *, target_channel: nextcord.VoiceChannel = None):
+        """Déplacer tous les membres en vocal sauf un membre spécifique"""
+        
+        if not target_channel:
+            return await ctx.send("❌ Veuillez spécifier un salon cible")
+        
+        # Récupérer tous les membres en vocal sauf celui spécifié
+        members_to_move = []
+        
+        for member in ctx.guild.members:
+            if member.voice and member.id != except_member.id:
+                members_to_move.append(member)
+        
+        if not members_to_move:
+            return await ctx.send("❌ Aucun membre à déplacer")
+        
+        embed = nextcord.Embed(
+            title="🔄 Déplacement massif (sauf 1 membre)",
+            description=f"Déplacement de **{len(members_to_move)}** membre(s) vers {target_channel.mention}",
             color=0x3498db
         )
         
-        # Ajouter les stats par salon
-        if stats:
-            embed.add_field(name="📋 Par salon", value="\n".join(stats), inline=False)
-        
-        # Ajouter la moyenne
-        moyenne = total_membres / len(voice_channels) if voice_channels else 0
         embed.add_field(
-            name="📈 Moyenne", 
-            value=f"**{moyenne:.1f}** membres par salon", 
-            inline=True
+            name="👤 Membre exclu",
+            value=f"{except_member.mention} ne sera pas déplacé",
+            inline=False
         )
         
-        embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
-        embed.set_footer(text=f"Demandé par {ctx.author.name}")
+        embed.add_field(
+            name="📋 Liste des membres",
+            value=", ".join([m.mention for m in members_to_move[:10]]) + ("..." if len(members_to_move) > 10 else ""),
+            inline=False
+        )
+        
+        await ctx.send(embed=embed)
+        
+        # Déplacer les membres
+        moved = 0
+        failed = 0
+        
+        for member in members_to_move:
+            try:
+                await member.move_to(target_channel)
+                moved += 1
+                await asyncio.sleep(0.3)  # Petit délai pour éviter le rate limiting
+            except:
+                failed += 1
+        
+        result_embed = nextcord.Embed(
+            title="✅ Déplacement terminé",
+            description=f"Résultat du déplacement massif",
+            color=0x2ECC71
+        )
+        
+        result_embed.add_field(
+            name="📊 Statistiques",
+            value=f"✅ Déplacés: {moved}\n❌ Échecs: {failed}",
+            inline=False
+        )
+        
+        await ctx.send(embed=result_embed)
+
+    @commands.command(name="move_from_category")
+    @has_role()
+    async def move_from_category(self, ctx, source_category: nextcord.CategoryChannel, *, target_channel: nextcord.VoiceChannel = None):
+        """Déplacer tous les membres d'une catégorie vers un salon spécifique"""
+        
+        if not target_channel:
+            return await ctx.send("❌ Veuillez spécifier un salon cible")
+        
+        # Récupérer tous les salons vocaux de la catégorie
+        voice_channels = [ch for ch in source_category.voice_channels]
+        
+        if not voice_channels:
+            return await ctx.send("❌ Aucun salon vocal dans cette catégorie")
+        
+        # Récupérer tous les membres dans ces salons
+        members_to_move = set()
+        
+        for channel in voice_channels:
+            for member in channel.members:
+                members_to_move.add(member)
+        
+        if not members_to_move:
+            return await ctx.send("❌ Aucun membre à déplacer dans cette catégorie")
+        
+        embed = nextcord.Embed(
+            title="� Déplacement depuis catégorie",
+            description=f"Déplacement de **{len(members_to_move)}** membre(s) depuis {source_category.name}",
+            color=0x3498db
+        )
+        
+        embed.add_field(
+            name="📋 Salons source",
+            value="\n".join([f"• {ch.mention} ({len(ch.members)} membres)" for ch in voice_channels]),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🎯 Salon cible",
+            value=target_channel.mention,
+            inline=False
+        )
+        
+        await ctx.send(embed=embed)
+        
+        # Déplacer les membres
+        moved = 0
+        failed = 0
+        
+        for member in members_to_move:
+            try:
+                await member.move_to(target_channel)
+                moved += 1
+                await asyncio.sleep(0.3)
+            except:
+                failed += 1
+        
+        result_embed = nextcord.Embed(
+            title="✅ Déplacement terminé",
+            description=f"Déplacement depuis {source_category.name} terminé",
+            color=0x2ECC71
+        )
+        
+        result_embed.add_field(
+            name="📊 Statistiques",
+            value=f"✅ Déplacés: {moved}\n❌ Échecs: {failed}",
+            inline=False
+        )
+        
+        await ctx.send(embed=result_embed)
+
+    @commands.command(name="shuffle_category")
+    @has_role()
+    async def shuffle_category(self, ctx, category: nextcord.CategoryChannel):
+        """Mélanger aléatoirement tous les membres d'une catégorie entre les salons"""
+        
+        voice_channels = [ch for ch in category.voice_channels]
+        
+        if len(voice_channels) < 2:
+            return await ctx.send("❌ Il faut au moins 2 salons vocaux dans la catégorie")
+        
+        # Récupérer tous les membres
+        all_members = []
+        for channel in voice_channels:
+            all_members.extend(channel.members)
+        
+        if not all_members:
+            return await ctx.send("❌ Aucun membre à mélanger")
+        
+        embed = nextcord.Embed(
+            title="🔀 Mélange de catégorie",
+            description=f"Mélange de **{len(all_members)}** membre(s) dans {len(voice_channels)} salons",
+            color=0x3498db
+        )
+        
+        embed.add_field(
+            name="📋 Salons concernés",
+            value="\n".join([f"• {ch.mention}" for ch in voice_channels]),
+            inline=False
+        )
+        
+        await ctx.send(embed=embed)
+        
+        # Mélanger les membres
+        import random
+        random.shuffle(all_members)
+        
+        # Distribuer les membres
+        moved = 0
+        failed = 0
+        
+        for i, member in enumerate(all_members):
+            target_channel = voice_channels[i % len(voice_channels)]
+            
+            try:
+                await member.move_to(target_channel)
+                moved += 1
+                await asyncio.sleep(0.3)
+            except:
+                failed += 1
+        
+        result_embed = nextcord.Embed(
+            title="✅ Mélange terminé",
+            description=f"Mélange dans {category.name} terminé",
+            color=0x2ECC71
+        )
+        
+        result_embed.add_field(
+            name="� Statistiques",
+            value=f"✅ Déplacés: {moved}\n❌ Échecs: {failed}",
+            inline=False
+        )
+        
+        await ctx.send(embed=result_embed)
+
+    @commands.command(name="gather_all")
+    @has_role()
+    async def gather_all(self, ctx, *, target_channel: nextcord.VoiceChannel = None):
+        """Rassembler tous les membres en vocal dans un seul salon"""
+        
+        if not target_channel:
+            return await ctx.send("❌ Veuillez spécifier un salon de rassemblement")
+        
+        # Récupérer tous les membres en vocal
+        all_members = []
+        for channel in ctx.guild.voice_channels:
+            if channel.id != target_channel.id:  # Exclure le salon cible
+                all_members.extend(channel.members)
+        
+        if not all_members:
+            return await ctx.send("❌ Aucun membre à rassembler")
+        
+        embed = nextcord.Embed(
+            title="🎯 Rassemblement vocal",
+            description=f"Rassemblement de **{len(all_members)}** membre(s) dans {target_channel.mention}",
+            color=0x3498db
+        )
+        
+        embed.add_field(
+            name="📊 Distribution actuelle",
+            value="\n".join([f"• {ch.name}: {len(ch.members)} membres" for ch in ctx.guild.voice_channels if ch.id != target_channel.id]),
+            inline=False
+        )
+        
+        await ctx.send(embed=embed)
+        
+        # Rassembler les membres
+        moved = 0
+        failed = 0
+        
+        for member in all_members:
+            try:
+                await member.move_to(target_channel)
+                moved += 1
+                await asyncio.sleep(0.3)
+            except:
+                failed += 1
+        
+        result_embed = nextcord.Embed(
+            title="✅ Rassemblement terminé",
+            description=f"Tous les membres rassemblés dans {target_channel.mention}",
+            color=0x2ECC71
+        )
+        
+        result_embed.add_field(
+            name="📊 Statistiques",
+            value=f"✅ Rassemblés: {moved}\n❌ Échecs: {failed}",
+            inline=False
+        )
+        
+        await ctx.send(embed=result_embed)
+
+    @commands.command(name="create_voice_rooms")
+    @has_role()
+    async def create_voice_rooms(self, ctx, category: nextcord.CategoryChannel, room_count: int = 5, room_name: str = "Salon"):
+        """Créer plusieurs salons vocaux automatiquement"""
+        
+        if room_count < 1 or room_count > 20:
+            return await ctx.send("❌ Nombre de salons invalide (1-20)")
+        
+        embed = nextcord.Embed(
+            title="🏗️ Création de salons vocaux",
+            description=f"Création de **{room_count}** salon(s) dans {category.mention}",
+            color=0x3498db
+        )
+        
+        created = 0
+        failed = 0
+        
+        for i in range(room_count):
+            try:
+                channel = await ctx.guild.create_voice_channel(
+                    f"{room_name} {i+1}",
+                    category=category,
+                    user_limit=None
+                )
+                created += 1
+                await asyncio.sleep(0.2)  # Petit délai
+            except Exception as e:
+                failed += 1
+                print(f"Erreur création salon {i+1}: {e}")
+        
+        embed.add_field(
+            name="📊 Résultat",
+            value=f"✅ Créés: {created}\n❌ Échecs: {failed}",
+            inline=False
+        )
         
         await ctx.send(embed=embed)
 
-    @commands.command(name="optimiser_vocal", aliases=["optimize_voice"])
+    @commands.command(name="clone_voice_channel")
     @has_role()
-    async def optimiser_vocal(self, ctx, category: nextcord.CategoryChannel = None):
-        """Optimiser automatiquement la distribution vocale"""
-        if not category:
-            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+optimiser_vocal @catégorie`", 0xff0000))
+    async def clone_voice_channel(self, ctx, source_channel: nextcord.VoiceChannel, *, new_name: str = None):
+        """Cloner un salon vocal avec ses membres"""
         
-        # D'abord montrer les stats actuelles
-        await self.stats_vocal(ctx, category)
+        if not new_name:
+            new_name = f"{source_channel.name} (Clone)"
         
-        # Puis équilibrer automatiquement
-        await self.equilibrer_auto(ctx, category)
+        # Créer le clone dans la même catégorie
+        try:
+            clone_channel = await ctx.guild.create_voice_channel(
+                new_name,
+                category=source_channel.category,
+                user_limit=source_channel.user_limit,
+                bitrate=source_channel.bitrate,
+                overwrites=source_channel.overwrites
+            )
+            
+            embed = nextcord.Embed(
+                title="🔄 Salon cloné",
+                description=f"{source_channel.mention} a été cloné vers {clone_channel.mention}",
+                color=0x2ECC71
+            )
+            
+            # Déplacer tous les membres vers le clone
+            if source_channel.members:
+                embed.add_field(
+                    name="👥 Déplacement des membres",
+                    value=f"Déplacement de **{len(source_channel.members)}** membre(s) vers le clone...",
+                    inline=False
+                )
+                
+                await ctx.send(embed=embed)
+                
+                moved = 0
+                for member in source_channel.members:
+                    try:
+                        await member.move_to(clone_channel)
+                        moved += 1
+                        await asyncio.sleep(0.3)
+                    except:
+                        pass
+                
+                result_embed = nextcord.Embed(
+                    title="✅ Clone terminé",
+                    description=f"Salon {clone_channel.mention} prêt avec {moved} membres",
+                    color=0x2ECC71
+                )
+                await ctx.send(embed=result_embed)
+            else:
+                await ctx.send(embed=embed)
+                
+        except Exception as e:
+            await ctx.send(f"❌ Erreur lors du clonage: {e}")
+
+    @commands.command(name="swap_channels")
+    @has_role()
+    async def swap_channels(self, ctx, channel1: nextcord.VoiceChannel, channel2: nextcord.VoiceChannel):
+        """Échanger les membres entre deux salons vocaux"""
+        
+        members1 = list(channel1.members)
+        members2 = list(channel2.members)
+        
+        if not members1 and not members2:
+            return await ctx.send("❌ Aucun membre à échanger")
+        
+        embed = nextcord.Embed(
+            title="🔄 Échange de salons",
+            description=f"Échange entre {channel1.mention} et {channel2.mention}",
+            color=0x3498db
+        )
+        
+        embed.add_field(
+            name="👥 Membres à échanger",
+            value=f"{channel1.mention}: **{len(members1)}** membre(s)\n{channel2.mention}: **{len(members2)}** membre(s)",
+            inline=False
+        )
+        
+        await ctx.send(embed=embed)
+        
+        # Échanger les membres
+        moved_from_1 = 0
+        moved_from_2 = 0
+        
+        # Déplacer membres de channel1 vers channel2
+        for member in members1:
+            try:
+                await member.move_to(channel2)
+                moved_from_1 += 1
+                await asyncio.sleep(0.3)
+            except:
+                pass
+        
+        # Déplacer membres de channel2 vers channel1
+        for member in members2:
+            try:
+                await member.move_to(channel1)
+                moved_from_2 += 1
+                await asyncio.sleep(0.3)
+            except:
+                pass
+        
+        result_embed = nextcord.Embed(
+            title="✅ Échange terminé",
+            description=f"Échange entre les salons terminé",
+            color=0x2ECC71
+        )
+        
+        result_embed.add_field(
+            name="📊 Statistiques",
+            value=f"🔄 {channel1.mention} → {channel2.mention}: {moved_from_1}\n🔄 {channel2.mention} → {channel1.mention}: {moved_from_2}",
+            inline=False
+        )
+        
+        await ctx.send(embed=result_embed)
+
+    @commands.command(name="voice_activity")
+    @has_role()
+    async def voice_activity(self, ctx, category: nextcord.CategoryChannel = None):
+        """Afficher l'activité vocale détaillée"""
+        
+        if category:
+            voice_channels = category.voice_channels
+            title = f"📊 Activité vocale - {category.name}"
+        else:
+            voice_channels = ctx.guild.voice_channels
+            title = "📊 Activité vocale - Serveur"
+        
+        if not voice_channels:
+            return await ctx.send("❌ Aucun salon vocal trouvé")
+        
+        embed = nextcord.Embed(
+            title=title,
+            description=f"Analyse de **{len(voice_channels)}** salon(s) vocal(aux)",
+            color=0x3498db
+        )
+        
+        total_members = 0
+        active_channels = 0
+        empty_channels = 0
+        
+        channel_info = []
+        
+        for channel in voice_channels:
+            member_count = len(channel.members)
+            total_members += member_count
+            
+            if member_count > 0:
+                active_channels += 1
+                status = "🟢 Actif"
+            else:
+                empty_channels += 1
+                status = "⚫ Vide"
+            
+            # Détecter les membres muets/deafened
+            muted = sum(1 for m in channel.members if m.voice.mute)
+            deafened = sum(1 for m in channel.members if m.voice.deaf)
+            
+            channel_info.append(f"{status} {channel.mention}: **{member_count}** membre(s)")
+            if muted > 0 or deafened > 0:
+                channel_info[-1] += f" (🔇{muted} 👂{deafened})"
+        
+        embed.add_field(
+            name="📈 Statistiques générales",
+            value=f"👥 Total membres: **{total_members}**\n🟢 Salons actifs: **{active_channels}**\n⚫ Salons vides: **{empty_channels}**",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📋 Détail par salon",
+            value="\n".join(channel_info[:10]),  # Limiter à 10 salons
+            inline=False
+        )
+        
+        if len(channel_info) > 10:
+            embed.add_field(
+                name="📊 Plus de salons",
+                value=f"Et {len(channel_info) - 10} autre(s) salon(s)",
+                inline=False
+            )
+        
+        embed.set_footer(text="Utilise +voice_activity @catégorie pour une catégorie spécifique")
+        await ctx.send(embed=embed)
+
+    @commands.command(name="move_afk")
+    @has_role()
+    async def move_afk(self, ctx, target_channel: nextcord.VoiceChannel, afk_minutes: int = 10):
+        """Déplacer les membres AFK vers un salon spécifique"""
+        
+        if afk_minutes < 1 or afk_minutes > 60:
+            return await ctx.send("❌ Durée AFK invalide (1-60 minutes)")
+        
+        afk_members = []
+        
+        for member in ctx.guild.members:
+            if member.voice:
+                # Vérifier si le membre est AFK (pas de statut en vocal depuis X minutes)
+                # Note: Discord ne fournit pas directement cette info, donc on utilise une heuristique
+                if member.voice.self_mute or member.voice.self_deaf:
+                    afk_members.append(member)
+        
+        if not afk_members:
+            return await ctx.send("❌ Aucun membre AFK détecté")
+        
+        embed = nextcord.Embed(
+            title="🔇 Déplacement AFK",
+            description=f"Déplacement de **{len(afk_members)}** membre(s) AFK vers {target_channel.mention}",
+            color=0xF39C12
+        )
+        
+        embed.add_field(
+            name="⏱️ Critère AFK",
+            value=f"Membres muets ou sourds depuis plus de {afk_minutes} minutes",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="👥 Membres concernés",
+            value=", ".join([m.mention for m in afk_members[:10]]) + ("..." if len(afk_members) > 10 else ""),
+            inline=False
+        )
+        
+        await ctx.send(embed=embed)
+        
+        # Déplacer les membres AFK
+        moved = 0
+        failed = 0
+        
+        for member in afk_members:
+            try:
+                await member.move_to(target_channel)
+                moved += 1
+                await asyncio.sleep(0.3)
+            except:
+                failed += 1
+        
+        result_embed = nextcord.Embed(
+            title="✅ Déplacement AFK terminé",
+            description=f"Membres AFK déplacés vers {target_channel.mention}",
+            color=0x2ECC71
+        )
+        
+        result_embed.add_field(
+            name="📊 Statistiques",
+            value=f"✅ Déplacés: {moved}\n❌ Échecs: {failed}",
+            inline=False
+        )
+        
+        await ctx.send(embed=result_embed)
+
+    @commands.command(name="voice_backup")
+    @has_role()
+    async def voice_backup(self, ctx, category: nextcord.CategoryChannel = None):
+        """Créer une sauvegarde de la distribution vocale actuelle"""
+        
+        if category:
+            voice_channels = category.voice_channels
+            backup_name = f"backup_{category.name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        else:
+            voice_channels = ctx.guild.voice_channels
+            backup_name = f"backup_serveur_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        # Créer la sauvegarde
+        backup_data = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "category": category.name if category else "serveur",
+            "channels": {}
+        }
+        
+        for channel in voice_channels:
+            backup_data["channels"][channel.name] = [
+                {
+                    "id": member.id,
+                    "name": member.name,
+                    "display_name": member.display_name
+                }
+                for member in channel.members
+            ]
+        
+        # Sauvegarder dans un fichier
+        try:
+            os.makedirs("data/backups", exist_ok=True)
+            with open(f"data/backups/{backup_name}.json", "w", encoding="utf-8") as f:
+                json.dump(backup_data, f, indent=2, ensure_ascii=False)
+            
+            embed = nextcord.Embed(
+                title="💾 Sauvegarde vocale créée",
+                description=f"Sauvegarde de la distribution vocale terminée",
+                color=0x2ECC71
+            )
+            
+            embed.add_field(
+                name="📊 Statistiques",
+                value=f"📁 Fichier: `{backup_name}.json`\n📋 Salons: **{len(voice_channels)}**\n👥 Membres totaux: **{sum(len(ch.members) for ch in voice_channels)}**",
+                inline=False
+            )
+            
+            embed.set_footer(text="Utilise +voice_restore pour restaurer cette sauvegarde")
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            await ctx.send(f"❌ Erreur lors de la sauvegarde: {e}")
+
+    @commands.command(name="voice_restore")
+    @has_role()
+    async def voice_restore(self, ctx, backup_file: str = None):
+        """Restaurer une sauvegarde vocale"""
+        
+        if not backup_file:
+            # Lister les sauvegardes disponibles
+            try:
+                backup_dir = "data/backups"
+                if not os.path.exists(backup_dir):
+                    return await ctx.send("❌ Aucune sauvegarde disponible")
+                
+                backups = [f for f in os.listdir(backup_dir) if f.endswith('.json')]
+                
+                if not backups:
+                    return await ctx.send("❌ Aucune sauvegarde disponible")
+                
+                embed = nextcord.Embed(
+                    title="📋 Sauvegardes disponibles",
+                    description=f"**{len(backups)}** sauvegarde(s) disponible(s)",
+                    color=0x3498db
+                )
+                
+                backup_list = []
+                for backup in sorted(backups, reverse=True)[:10]:  # 10 plus récentes
+                    backup_list.append(f"• `{backup}`")
+                
+                embed.add_field(
+                    name="📁 Fichiers",
+                    value="\n".join(backup_list),
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="🔄 Utilisation",
+                    value="Utilise: `+voice_restore nom_du_fichier`",
+                    inline=False
+                )
+                
+                await ctx.send(embed=embed)
+                return
+                
+            except Exception as e:
+                return await ctx.send(f"❌ Erreur: {e}")
+        
+        # Charger et restaurer la sauvegarde
+        try:
+            backup_path = f"data/backups/{backup_file}"
+            if not backup_file.endswith('.json'):
+                backup_path += '.json'
+            
+            with open(backup_path, "r", encoding="utf-8") as f:
+                backup_data = json.load(f)
+            
+            embed = nextcord.Embed(
+                title="🔄 Restauration vocale",
+                description=f"Restauration de la sauvegarde: `{backup_file}`",
+                color=0xF39C12
+            )
+            
+            embed.add_field(
+                name="📅 Date de sauvegarde",
+                value=backup_data["timestamp"],
+                inline=False
+            )
+            
+            embed.add_field(
+                name="📋 Contenu",
+                value=f"Catégorie: {backup_data['category']}\nSalons: {len(backup_data['channels'])}",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            
+            # Restaurer les membres
+            restored = 0
+            failed = 0
+            
+            for channel_name, members in backup_data["channels"].items():
+                # Chercher le salon
+                target_channel = nextcord.utils.get(ctx.guild.voice_channels, name=channel_name)
+                
+                if not target_channel:
+                    failed += len(members)
+                    continue
+                
+                for member_data in members:
+                    member = ctx.guild.get_member(member_data["id"])
+                    if member and member.voice and member.voice.channel != target_channel:
+                        try:
+                            await member.move_to(target_channel)
+                            restored += 1
+                            await asyncio.sleep(0.3)
+                        except:
+                            failed += 1
+                    else:
+                        failed += 1
+            
+            result_embed = nextcord.Embed(
+                title="✅ Restauration terminée",
+                description=f"Sauvegarde `{backup_file}` restaurée",
+                color=0x2ECC71
+            )
+            
+            result_embed.add_field(
+                name="📊 Statistiques",
+                value=f"✅ Restaurés: {restored}\n❌ Échecs: {failed}",
+                inline=False
+            )
+            
+            await ctx.send(embed=result_embed)
+            
+        except FileNotFoundError:
+            await ctx.send(f"❌ Fichier de sauvegarde `{backup_file}` non trouvé")
+        except Exception as e:
+            await ctx.send(f"❌ Erreur lors de la restauration: {e}")
+
+    @commands.command(name="voice_limits")
+    @has_role()
+    async def voice_limits(self, ctx, channel: nextcord.VoiceChannel, limit: int = None):
+        """Gérer les limites de membres d'un salon vocal"""
+        
+        if limit is None:
+            # Afficher les limites actuelles
+            current_limit = channel.user_limit
+            status = "Illimité" if current_limit == 0 else f"{current_limit} membres"
+            
+            embed = nextcord.Embed(
+                title="📊 Limites du salon",
+                description=f"Limites actuelles pour {channel.mention}",
+                color=0x3498db
+            )
+            
+            embed.add_field(
+                name="👥 Limite actuelle",
+                value=status,
+                inline=False
+            )
+            
+            embed.add_field(
+                name="📈 Occupation",
+                value=f"**{len(channel.members)}/{current_limit if current_limit > 0 else '∞'}** membres",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="🔧 Utilisation",
+                value="Utilise: `+voice_limits #salon <nombre>` pour définir une limite (0 = illimité)",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            return
+        
+        if limit < 0 or limit > 99:
+            return await ctx.send("❌ Limite invalide (0-99, 0 = illimité)")
+        
+        try:
+            await channel.edit(user_limit=limit)
+            
+            status = "Illimité" if limit == 0 else f"{limit} membres"
+            
+            embed = nextcord.Embed(
+                title="✅ Limite modifiée",
+                description=f"Limite de {channel.mention} définie sur **{status}**",
+                color=0x2ECC71
+            )
+            
+            embed.add_field(
+                name="📊 Nouvelle configuration",
+                value=f"Limite: {status}\nMembres actuels: {len(channel.members)}",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            await ctx.send(f"❌ Erreur lors de la modification: {e}")
+
+    @commands.command(name="voice_cleanup")
+    @has_role()
+    async def voice_cleanup(self, ctx, category: nextcord.CategoryChannel = None):
+        """Nettoyer les salons vocaux (supprimer les vides, renommer, etc.)"""
+        
+        if category:
+            voice_channels = category.voice_channels
+            scope = category.name
+        else:
+            voice_channels = ctx.guild.voice_channels
+            scope = "serveur"
+        
+        embed = nextcord.Embed(
+            title="🧹 Nettoyage vocal",
+            description=f"Nettoyage des salons vocaux de {scope}",
+            color=0xF39C12
+        )
+        
+        # Analyser les salons
+        empty_channels = []
+        low_activity_channels = []
+        renamed_channels = []
+        
+        for channel in voice_channels:
+            member_count = len(channel.members)
+            
+            if member_count == 0:
+                empty_channels.append(channel)
+            elif member_count <= 2:
+                low_activity_channels.append(channel)
+            
+            # Renommer les salons avec des noms génériques
+            if channel.name.startswith("🔊 Équilibrage-") or channel.name.startswith("Salon "):
+                try:
+                    new_name = f"🎤 Salon {channel.position + 1}"
+                    await channel.edit(name=new_name)
+                    renamed_channels.append(channel)
+                except:
+                    pass
+        
+        # Actions
+        deleted_count = 0
+        if empty_channels:
+            for channel in empty_channels[:5]:  # Limiter à 5 suppressions
+                try:
+                    await channel.delete()
+                    deleted_count += 1
+                    await asyncio.sleep(0.5)
+                except:
+                    pass
+        
+        embed.add_field(
+            name="📊 Actions effectuées",
+            value=f"🗑️ Salons supprimés: **{deleted_count}**\n📝 Salons renommés: **{len(renamed_channels)}**\n📋 Salons peu actifs: **{len(low_activity_channels)}**",
+            inline=False
+        )
+        
+        if low_activity_channels:
+            embed.add_field(
+                name="⚠️ Salons peu actifs",
+                value="\n".join([f"• {ch.mention} ({len(ch.members)} membres)" for ch in low_activity_channels[:5]]),
+                inline=False
+            )
+        
+        embed.set_footer(text="Nettoyage terminé")
+        await ctx.send(embed=embed)
 
 
 def setup(bot):

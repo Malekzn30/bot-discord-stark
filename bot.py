@@ -5,6 +5,7 @@ from flask import Flask
 import os
 import time
 import requests
+import asyncio
 from dotenv import load_dotenv
 import sys
 sys.path.append(os.path.dirname(__file__))
@@ -14,6 +15,18 @@ from config import TOKEN
 # ============================
 # DISCORD BOT - ULTRA OPTIMISÉ
 # ============================
+
+# Configuration pour Render gratuit
+os.environ["PYTHONUNBUFFERED"] = "1"  # Logs immédiats
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"  # Pas de .pyc
+
+# Importations des optimisations
+try:
+    from utils.optimization import RenderOptimizer, RENDER_CONFIG, check_render_health
+    OPTIMIZATION_ENABLED = True
+except ImportError:
+    OPTIMIZATION_ENABLED = False
+    print("[WARNING] Module d'optimisation non trouvé")
 
 # Intents optimisés pour le bot
 intents = nextcord.Intents.default()
@@ -35,6 +48,13 @@ bot.start_time = time.time()
 async def on_ready():
     print(f"Bot prêt : {bot.user}")
     cleanup_aggressive.start()
+    
+    # Initialiser l'optimiseur si disponible
+    if OPTIMIZATION_ENABLED:
+        bot.optimizer = RenderOptimizer(bot)
+        print("[OPTIMIZATION] Optimiseur Render activé")
+    
+    print("[START] Bot prêt et optimisé pour Render gratuit")
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -64,18 +84,31 @@ async def cleanup_aggressive():
     except Exception as e:
         print(f"[GC] Erreur: {e}")
 
-def load_cogs():
-    cogs_to_load = ['moderation', 'system', 'voice', 'logs', 'games', 'welcome', 'dm']
-    print(f"[DEBUG] Tentative de chargement des cogs: {cogs_to_load}")
+async def load_cogs_optimized():
+    """Charger les cogs avec gestion d'erreur et optimisation"""
+    cogs_to_load = ['moderation', 'system', 'voice', 'logs', 'games', 'welcome', 'dm', 'social', 'antimod', 'rolemanager']
     
     for cog in cogs_to_load:
         try:
+            # Nettoyage mémoire avant chaque chargement
+            if OPTIMIZATION_ENABLED:
+                gc.collect()
+            
             bot.load_extension(f"cogs.{cog}")
             print(f"[+] Cog chargé : {cog}")
+            
+            # Petite pause pour éviter le surchargement
+            await asyncio.sleep(0.1)
+            
         except Exception as e:
             print(f"[!] Erreur chargement {cog}: {e}")
-            import traceback
-            traceback.print_exc()
+            # Continuer malgré les erreurs pour ne pas bloquer le démarrage
+
+def load_cogs():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(load_cogs_optimized())
+    loop.close()
 
 # ============================
 # FAKE FLASK SERVER (pour Render)
