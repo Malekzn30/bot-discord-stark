@@ -46,6 +46,22 @@ def log_welcome(member, action, details=""):
     
     if action == "join":
         logger.info(f"JOIN - {member.name} (ID: {member.id}) a rejoint {member.guild.name}")
+        # Envoyer aussi un embed dans le channel de logs join si configuré
+        try:
+            import asyncio
+            from utils.embeds import create_embed
+            
+            # Créer un embed pour le join
+            embed = create_embed("🎉 Nouveau Membre", f"{member.mention} a rejoint le serveur !", member.guild, None)
+            embed.add_field(name="👤 Membre", value=f"{member} (ID: {member.id})", inline=False)
+            embed.add_field(name="📅 Compte créé", value=member.created_at.strftime("%d/%m/%Y"), inline=False)
+            embed.set_thumbnail(url=member.display_avatar.url)
+            
+            # Envoyer de manière asynchrone
+            asyncio.create_task(send_log_async(member, embed))
+        except Exception as e:
+            logger.error(f"Erreur envoi log join: {e}")
+            
     elif action == "member_count":
         logger.info(f"COUNT - Total membres: {details} | Membres humains: {details}")
     elif action == "public_sent":
@@ -62,6 +78,26 @@ def log_welcome(member, action, details=""):
         logger.error(f"WELCOME_DM_ERROR - {member.name} - {details}")
     elif action == "invite_created":
         logger.info(f"INVITE - Lien créé: {details}")
+
+async def send_log_async(member, embed):
+    """Fonction asynchrone pour envoyer le log de join"""
+    try:
+        # Importer ici pour éviter les imports circulaires
+        from cogs.logs import send_log
+        
+        await send_log(
+            member.guild.me,  # bot
+            "join",
+            "NOUVEAU MEMBRE",
+            {
+                "Membre": f"{member} (ID: {member.id})",
+                "Serveur": member.guild.name,
+                "Compte créé": member.created_at.strftime("%d/%m/%Y"),
+                "Rejoint le": member.joined_at.strftime("%d/%m/%Y")
+            }
+        )
+    except Exception as e:
+        print(f"Erreur send_log_async: {e}")
 
 # Fonction pour logger les commandes
 def log_command(ctx, command_name, details=""):
@@ -129,7 +165,8 @@ LOG_CATEGORIES = [
     "roles",
     "nicknames",
     "automod",
-    "system"
+    "system",
+    "join"
 ]
 
 DEFAULT_LOG_CHANNELS = {cat: None for cat in LOG_CATEGORIES}
@@ -173,7 +210,8 @@ CATEGORY_ICONS = {
     "roles": "🏷️",
     "nicknames": "📝",
     "automod": "🤖",
-    "system": "📊"
+    "system": "📊",
+    "join": "🎉"
 }
 
 CATEGORY_COLORS = {
@@ -188,7 +226,8 @@ CATEGORY_COLORS = {
     "roles": 0xF1C40F,
     "nicknames": 0xE67E22,
     "automod": 0x8E44AD,
-    "system": 0x34495E
+    "system": 0x34495E,
+    "join": 0x2ECC71
 }
 
 async def send_log(bot, category: str, title: str, fields: dict, ctx=None, audit_id=None):
