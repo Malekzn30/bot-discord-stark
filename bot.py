@@ -5,6 +5,10 @@ from flask import Flask
 import os
 import time
 import requests
+from dotenv import load_dotenv
+import sys
+sys.path.append(os.path.dirname(__file__))
+from logs import setup_logging
 from config import TOKEN
 
 # ============================
@@ -103,12 +107,16 @@ def keep_alive():
 # ============================
 
 if __name__ == "__main__":
+    # Initialiser le système de logs
+    logger = setup_logging()
+    logger.info("Démarrage du Bot Stark")
+    
     # Lancer Flask dans un thread secondaire
     threading.Thread(target=run_flask).start()
-
+    
     # Lancer le keep-alive dans un autre thread
     threading.Thread(target=keep_alive).start()
-
+    
     # Lancer le bot Discord dans le thread principal
     load_cogs()
     bot.run(TOKEN)
