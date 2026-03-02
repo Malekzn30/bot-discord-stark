@@ -85,8 +85,11 @@ async def send_log_async(member, embed):
         # Importer ici pour éviter les imports circulaires
         from cogs.logs import send_log
         
+        # Récupérer le bot depuis le member
+        bot = member.guild.me
+        
         await send_log(
-            member.guild.me,  # bot
+            bot,
             "join",
             "NOUVEAU MEMBRE",
             {
@@ -514,79 +517,79 @@ class LogsConfig(commands.Cog):
             placeholder="🔍 Choisis une catégorie de logs...",
             options=[
                 nextcord.SelectOption(
-                    label="⚠️ Warn",
+                    label="Warn",
                     description="Logs des avertissements",
                     emoji="⚠️",
                     value="warn"
                 ),
                 nextcord.SelectOption(
-                    label="📘 Commands",
+                    label="Commands",
                     description="Logs des commandes utilisées",
-                    emoji="�",
+                    emoji="📘",
                     value="commands"
                 ),
                 nextcord.SelectOption(
-                    label="🛡️ Moderation",
+                    label="Moderation",
                     description="Logs de modération",
                     emoji="🛡️",
                     value="moderation"
                 ),
                 nextcord.SelectOption(
-                    label="🎙️ Voice",
+                    label="Voice",
                     description="Logs des activités vocales",
                     emoji="🎙️",
                     value="voice"
                 ),
                 nextcord.SelectOption(
-                    label="💬 Messages",
+                    label="Messages",
                     description="Logs des messages",
                     emoji="💬",
                     value="messages"
                 ),
                 nextcord.SelectOption(
-                    label="🔒 Security",
+                    label="Security",
                     description="Logs de sécurité",
                     emoji="🔒",
                     value="security"
                 ),
                 nextcord.SelectOption(
-                    label="⚙️ Admin",
+                    label="Admin",
                     description="Logs admin",
                     emoji="⚙️",
                     value="admin"
                 ),
                 nextcord.SelectOption(
-                    label="🌐 Server",
+                    label="Server",
                     description="Logs serveur",
                     emoji="🌐",
                     value="server"
                 ),
                 nextcord.SelectOption(
-                    label="🏷️ Roles",
+                    label="Roles",
                     description="Logs des rôles",
                     emoji="🏷️",
                     value="roles"
                 ),
                 nextcord.SelectOption(
-                    label="📝 Nicknames",
+                    label="Nicknames",
                     description="Logs des pseudos",
                     emoji="📝",
                     value="nicknames"
                 ),
                 nextcord.SelectOption(
-                    label="🤖 Automod",
+                    label="Automod",
                     description="Logs auto-modération",
                     emoji="🤖",
                     value="automod"
                 ),
                 nextcord.SelectOption(
-                    label="📊 System",
+                    label="System",
                     description="Logs système",
                     emoji="📊",
                     value="system"
                 ),
                 nextcord.SelectOption(
-                    label="🎉 Join",
+                    label="Join",
                     description="Logs des arrivées",
                     emoji="🎉",
                     value="join"
