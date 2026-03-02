@@ -4,9 +4,11 @@ from datetime import timedelta
 import sqlite3
 import os
 import json
-
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from cogs.logs import send_log   # ← AJOUT OBLIGATOIRE
 from utils.embeds import create_embed, create_error_embed, create_warn_embed, create_success_embed
+from cogs.logs import log_command, log_moderation
 
 # ----- gestion des permissions de commandes -----
 COMMAND_ROLES_PATH = os.path.join(os.path.dirname(__file__), "command_roles.json")
@@ -255,59 +257,6 @@ class Moderation(commands.Cog):
 
         await member.edit(timeout=None)
         await ctx.send(f"🔓 Timeout retiré pour {member.mention}.")
-
-    # ============================================================
-    # WARNS (SQLite)
-    # ============================================================
-    @commands.command(name="warn")
-    @commands.has_permissions(kick_members=True)
-    async def warn(self, ctx, member: nextcord.Member = None, *, reason="Aucune raison"):
-        if not member:
-            embed = create_error_embed("Erreur de Warn", "Veuillez mentionner un membre.", ctx.guild, self.bot)
-            await ctx.send(embed=embed)
-            return
-
-        if member == ctx.author:
-            embed = create_error_embed("Erreur de Warn", "Vous ne pouvez pas vous warn vous-même.", ctx.guild, self.bot)
-            await ctx.send(embed=embed)
-            return
-
-        self.cursor.execute("INSERT INTO warns (user_id, reason, moderator_id) VALUES (?, ?, ?)", (member.id, reason, ctx.author.id))
-        self.db.commit()
-
-        warn_count = self.cursor.execute(
-            "SELECT COUNT(*) FROM warns WHERE user_id = ?", (member.id,)
-        ).fetchone()[0]
-
-        embed = create_warn_embed("Avertissement émis", "", ctx.guild, self.bot)
-        embed.add_field(name="👤 Membre averti", value=member.mention, inline=False)
-        embed.add_field(name="📄 Raison", value=reason, inline=False)
-        embed.add_field(name="👮 Modérateur", value=ctx.author.mention, inline=False)
-        embed.add_field(name="📊 Total de warns", value=f"**{warn_count}** avertissement{'s' if warn_count > 1 else ''}", inline=False)
-        embed.set_thumbnail(url=member.display_avatar.url)
-        
-        await ctx.send(embed=embed)
-
-        # attribution du rôle de warn
-        role = ctx.guild.get_role(1477499178363129867)
-        if role:
-            try:
-                await member.add_roles(role, reason="Warn automatique")
-            except Exception:
-                pass  # on ignore si ça échoue
-
-        # envoi du log
-        await send_log(
-            self.bot,
-            "warn",
-            "WARN APPLIQUÉ",
-            {
-                "Auteur": f"{ctx.author} (ID: {ctx.author.id})",
-                "Cible": f"{member} (ID: {member.id})",
-                "Raison": reason,
-                "Total warns": str(warn_count)
-            }
-        )
 
     @commands.command(name="warnlist")
     async def warnlist(self, ctx, member: nextcord.Member = None):

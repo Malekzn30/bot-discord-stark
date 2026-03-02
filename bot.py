@@ -8,7 +8,7 @@ import requests
 from dotenv import load_dotenv
 import sys
 sys.path.append(os.path.dirname(__file__))
-from logs import setup_logging
+from cogs.logs import setup_logging
 from config import TOKEN
 
 # ============================

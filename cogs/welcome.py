@@ -4,7 +4,7 @@ import os
 import json
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from logs import log_welcome
+from cogs.logs import log_welcome
 
 class Welcome(commands.Cog):
     def __init__(self, bot):
@@ -14,27 +14,38 @@ class Welcome(commands.Cog):
     async def on_member_join(self, member):
         """Envoyer un message d'arrivée quand un membre rejoint le serveur"""
         
+        # Logger l'arrivée du membre
         log_welcome(member, "join", f"{member.guild.name} (ID: {member.guild.id})")
-        log_welcome(member, "info", f"Total membres (avec bots): {len(member.guild.members)}")
         
-        # Récupérer le nombre correct de membres
-        member_count = len([m for m in member.guild.members if not m.bot])
-        log_welcome(member, "info", f"Total membres (sans bots): {member_count}")
+        # Récupérer le nombre correct de membres (tous les membres, y compris les bots)
+        total_members = len(member.guild.members)
+        
+        # Récupérer le nombre de membres humains (exclut les bots)
+        human_members = len([m for m in member.guild.members if not m.bot])
+        
+        # Logger les statistiques
+        log_welcome(member, "member_count", f"Total: {total_members} | Humains: {human_members}")
         
         try:
-            # Créer l'embed d'arrivée
+            # Créer l'embed d'arrivée avec le bon comptage
             embed = nextcord.Embed(
                 title=f"👋 Bienvenue {member.name} !",
-                description=f"Tu es notre **{member_count}ème** membre !",
+                description=f"Tu es notre **{human_members}ème** membre humain !",
                 color=0x3498db,
                 timestamp=member.joined_at
             )
             
-            # Ajouter l'information sur qui a invité
-            # Note: Discord ne fournit plus cette information directement, donc on utilise un message générique
+            # Ajouter l'information sur le serveur
             embed.add_field(
                 name="🎉 Rejoins-nous !",
                 value=f"Nous sommes ravis de t'accueillir sur **{member.guild.name}** !",
+                inline=False
+            )
+            
+            # Ajouter les statistiques du serveur
+            embed.add_field(
+                name="📊 Statistiques",
+                value=f"👥 Total membres: **{total_members}**\n🤖 Bots: **{total_members - human_members}**\n👤 Humains: **{human_members}**",
                 inline=False
             )
             
@@ -58,8 +69,7 @@ class Welcome(commands.Cog):
                 embed.set_thumbnail(url=member.guild.icon.url)
             
             # Envoyer dans le channel général (ou un channel de bienvenue configuré)
-            # Tu peux modifier l'ID du channel de bienvenue ici
-            welcome_channel_id = 1469768104786657534  # Mets l'ID du channel de bienvenue ici
+            welcome_channel_id = 1469768104786657534  # ID du channel de bienvenue
             
             if welcome_channel_id:
                 channel = self.bot.get_channel(welcome_channel_id)
@@ -87,7 +97,7 @@ class Welcome(commands.Cog):
             
             # Créer le lien d'invitation (illimité et n'expire pas)
             invite = await member.guild.create_invite(max_uses=0, max_age=0, unique=False)
-            log_welcome(member, "info", f"Invitation créée: {invite.url}")
+            log_welcome(member, "invite_created", invite.url)
             
             # Envoyer un message normal (pas un embed)
             message = f"🍃 Bienvenue {member.mention} sur {member.guild.name} !\n\nVoici un lien du serveur si tu quittes sans faire exprès :\n{invite.url}"
