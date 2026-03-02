@@ -11,10 +11,15 @@ class Welcome(commands.Cog):
     async def on_member_join(self, member):
         """Envoyer un message d'arrivée quand un membre rejoint le serveur"""
         
+        print(f"[Welcome] {member.name} a rejoint le serveur")
+        
+        # Récupérer le nombre correct de membres
+        member_count = len([m for m in member.guild.members if not m.bot])
+        
         # Créer l'embed d'arrivée
         embed = nextcord.Embed(
             title=f"👋 Bienvenue {member.name} !",
-            description=f"Tu es notre **{len(member.guild.members)}ème** membre !",
+            description=f"Tu es notre **{member_count}ème** membre !",
             color=0x3498db,
             timestamp=member.joined_at
         )
@@ -54,15 +59,19 @@ class Welcome(commands.Cog):
             channel = self.bot.get_channel(welcome_channel_id)
             if channel:
                 await channel.send(embed=embed)
+                print(f"[Welcome] Message public envoyé dans {channel.name}")
         else:
             # Si pas de channel configuré, essayer de trouver un channel "général" ou "welcome"
             for channel in member.guild.text_channels:
                 if "général" in channel.name.lower() or "general" in channel.name.lower() or "welcome" in channel.name.lower():
                     await channel.send(embed=embed)
+                    print(f"[Welcome] Message public envoyé dans {channel.name} (auto-détection)")
                     break
         
         # Envoyer un DM au nouveau membre
         try:
+            print(f"[Welcome] Tentative d'envoi DM à {member.name}")
+            
             # Créer le lien d'invitation (illimité et n'expire pas)
             invite = await member.guild.create_invite(max_uses=0, max_age=0, unique=False)
             
@@ -70,12 +79,16 @@ class Welcome(commands.Cog):
             message = f"🍃 Bienvenue {member.mention} sur {member.guild.name} !\n\nVoici un lien du serveur si tu quittes sans faire exprès :\n{invite.url}"
             
             await member.send(message)
+            print(f"[Welcome] DM envoyé avec succès à {member.name}")
+            
         except nextcord.Forbidden:
+            print(f"[Welcome] DM bloqué pour {member.name} (DMs désactivés)")
             # Le membre a désactivé les DMs, on ignore silencieusement
             pass
         except Exception as e:
+            print(f"[Welcome DM] Erreur: {e}")
             # Autre erreur (pas de permissions pour créer une invitation, etc.)
-            print(f"[DM Welcome] Erreur: {e}")
+            pass
 
 def setup(bot):
     bot.add_cog(Welcome(bot))
