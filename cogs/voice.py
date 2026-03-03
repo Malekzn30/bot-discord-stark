@@ -680,6 +680,97 @@ class Voice(commands.Cog):
         await ctx.send(embed=embed_msg("🧹 Catégorie vidée", f"{moved} membres expulsés."))
 
     # ============================================================
+    # LOCKMEMBER (verrouiller un membre dans son salon vocal)
+    # ============================================================
+    @commands.command(name="lockmember")
+    @has_role()
+    async def lockmember(self, ctx, member: nextcord.Member = None):
+        if not member:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+lockmember @membre`", 0xff0000))
+
+        if not member.voice:
+            return await ctx.send(embed=embed_msg("❌ Erreur", "Ce membre n'est pas en vocal.", 0xff0000))
+
+        # Récupérer le salon vocal du membre
+        channel = member.voice.channel
+        
+        # Créer ou modifier les permissions du membre
+        overwrite = channel.overwrites_for(member)
+        
+        # Empêcher le membre de se déplacer
+        overwrite.move_members = False
+        overwrite.connect = True  # Il reste dans le salon mais ne peut pas bouger
+        
+        await channel.set_permissions(member, overwrite=overwrite)
+        
+        # Démarrer une tâche pour le ramener automatiquement s'il essaie de bouger
+        if member.id not in shuffle_tasks:
+            shuffle_tasks[member.id] = asyncio.create_task(self._auto_move_back(member, channel))
+
+        await ctx.send(embed=embed_msg("🔒 Membre verrouillé", f"{member.mention} est maintenant bloqué dans {format_channel(channel)}"))
+        
+        # Logger l'action
+        try:
+            from cogs.logs import log_command, log_moderation
+            log_command(ctx, "lockmember", f"Membre: {member.name}, Salon: {channel.name}")
+            log_moderation("lockmember", ctx.author.name, member.name, f"Verrouillage dans {channel.name}")
+        except:
+            pass
+
+    # ============================================================
+    # UNLOCKMEMBER (déverrouiller un membre)
+    # ============================================================
+    @commands.command(name="unlockmember")
+    @has_role()
+    async def unlockmember(self, ctx, member: nextcord.Member = None):
+        if not member:
+            return await ctx.send(embed=embed_msg("❌ Utilisation", "Utilise : `+unlockmember @membre`", 0xff0000))
+
+        # Arrêter la tâche de retour automatique
+        if member.id in shuffle_tasks:
+            shuffle_tasks[member.id].cancel()
+            del shuffle_tasks[member.id]
+
+        # Si le membre est dans un salon vocal, restaurer les permissions
+        if member.voice:
+            channel = member.voice.channel
+            overwrite = channel.overwrites_for(member)
+            
+            # Restaurer les permissions par défaut
+            overwrite.move_members = None
+            overwrite.connect = None
+            
+            await channel.set_permissions(member, overwrite=overwrite)
+            
+            await ctx.send(embed=embed_msg("🔓 Membre déverrouillé", f"{member.mention} peut maintenant se déplacer librement"))
+        else:
+            await ctx.send(embed=embed_msg("🔓 Membre déverrouillé", f"{member.mention} peut maintenant se déplacer librement"))
+        
+        # Logger l'action
+        try:
+            from cogs.logs import log_command, log_moderation
+            log_command(ctx, "unlockmember", f"Membre: {member.name}")
+            log_moderation("unlockmember", ctx.author.name, member.name, "Déverrouillage vocal")
+        except:
+            pass
+
+    async def _auto_move_back(self, member: nextcord.Member, target_channel: nextcord.VoiceChannel):
+        """Tâche de fond pour ramener automatiquement un membre dans son salon"""
+        try:
+            while True:
+                await asyncio.sleep(1)  # Vérifier chaque seconde
+                
+                # Si le membre n'est plus dans le bon salon, le ramener
+                if member.voice and member.voice.channel != target_channel:
+                    await member.move_to(target_channel)
+                    
+        except asyncio.CancelledError:
+            # La tâche a été annulée (unlockmember)
+            pass
+        except Exception as e:
+            print(f"[ERROR] Auto move back failed: {e}")
+
+    # ============================================================
     # LOCKVOICE (verrouiller un salon vocal)
     # ============================================================
     @commands.command(name="lockvoice")
@@ -2199,8 +2290,8 @@ class Voice(commands.Cog):
     async def create_voice_rooms(self, ctx, category: nextcord.CategoryChannel, room_count: int = 5, room_name: str = "Salon"):
         """Créer plusieurs salons vocaux automatiquement"""
         
-        if room_count < 1 or room_count > 20:
-            return await ctx.send("❌ Nombre de salons invalide (1-20)")
+        if room_count < 1 or room_count > 50:
+            return await ctx.send("❌ Nombre de salons invalide (1-50)")
         
         embed = nextcord.Embed(
             title="🏗️ Création de salons vocaux",

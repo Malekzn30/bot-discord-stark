@@ -26,7 +26,7 @@ class System(commands.Cog):
             # Toutes les catégories avec descriptions
             categories = [
                 ("🛡️ Modération", "Gestion serveur et modération avancée", "15 commandes"),
-                ("🎤 Vocal", "Gestion complète des salons vocaux", "21 commandes"),
+                ("🎤 Vocal", "Gestion complète des salons vocaux", "23 commandes"),
                 ("🎮 Jeux", "Jeux et divertissement variés", "10 commandes"),
                 ("🎉 Communauté", "Fonctionnalités communautaires", "10 commandes"),
                 ("🛠️ Utilitaires", "Commandes utilitaires diverses", "12 commandes"),
@@ -112,13 +112,15 @@ class System(commands.Cog):
     async def show_vocal_help(self, ctx):
         """Afficher l'aide du vocal"""
         embed = nextcord.Embed(
-            title="🎤 Gestion Vocale Complète (21 commandes)",
+            title="🎤 Gestion Vocale Complète (23 commandes)",
             description="Commandes pour gérer les salons vocaux",
             color=0x1ABC9C
         )
         
         commands = [
             ("déplacer", "Déplacer un membre en vocal", "+déplacer @membre #salon", "Admin/Modo"),
+            ("lockmember", "Bloquer un membre dans son salon vocal", "+lockmember @membre", "Admin/Modo"),
+            ("unlockmember", "Débloquer un membre vocal", "+unlockmember @membre", "Admin/Modo"),
             ("equilibrer", "Équilibrer les salons vocaux", "+equilibrer @catégorie <nombre>", "Admin/Modo"),
             ("equilibrer_auto", "Équilibrage automatique", "+equilibrer_auto @catégorie", "Admin/Modo"),
             ("immobiles", "Lister les membres immobiles", "+immobiles", "Admin/Modo"),
@@ -136,7 +138,9 @@ class System(commands.Cog):
             ("voice_backup", "Sauvegarder distribution", "+voice_backup #catégorie", "Admin"),
             ("voice_restore", "Restaurer distribution", "+voice_restore <fichier>", "Admin"),
             ("voice_limits", "Définir les limites", "+voice_limits #catégorie <max>", "Admin"),
-            ("voice_cleanup", "Nettoyer les salons vides", "+voice_cleanup", "Admin/Modo")
+            ("voice_cleanup", "Nettoyer les salons vides", "+voice_cleanup", "Admin/Modo"),
+            ("lockvoice", "Verrouiller un salon vocal", "+lockvoice #salon", "Admin/Modo"),
+            ("unlockvoice", "Déverrouiller un salon vocal", "+unlockvoice #salon", "Admin/Modo")
         ]
         
         for cmd, desc, usage, perm in commands:
