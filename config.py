@@ -38,7 +38,7 @@ cogs = [
     "cogs.system",
     "cogs.rolemanager",
     "cogs.config_panel",
-    "cogs.help_system",
+    "cogs.system_interactive",
     "cogs.bot_customization"
 ]
 

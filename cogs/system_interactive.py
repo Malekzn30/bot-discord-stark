@@ -18,9 +18,26 @@ class SystemInteractive(commands.Cog):
             
         async def on_timeout(self):
             """Désactiver les boutons après timeout"""
-            for item in self.children:
-                item.disabled = True
-            await self.message.edit(view=self)
+            try:
+                for item in self.children:
+                    item.disabled = True
+                
+                # Créer un embed de timeout
+                timeout_embed = nextcord.Embed(
+                    title="⏰ Session expirée",
+                    description="Le menu d'aide a été fermé pour inactivité.\nUtilise `+help` pour rouvrir le menu.",
+                    color=0xE74C3C
+                )
+                timeout_embed.set_footer(text=f"Session de {self.author.name} expirée")
+                
+                await self.message.edit(embed=timeout_embed, view=self)
+            except Exception as e:
+                print(f"[HELP TIMEOUT ERROR] {e}")
+                # En cas d'erreur, juste désactiver les boutons
+                try:
+                    await self.message.edit(view=None)
+                except:
+                    pass
 
         @nextcord.ui.select(
             placeholder="🎯 Choisis une catégorie...",
