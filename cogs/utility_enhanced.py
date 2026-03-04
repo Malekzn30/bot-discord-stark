@@ -172,5 +172,54 @@ class UtilityEnhanced(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Erreur: {e}")
 
+# ============= SYSTÈME DE COUNTDOWN =============
+    @commands.command(name="countdown")
+    async def countdown(self, ctx, seconds: int, *, message: str = "Compte à rebours terminé !"):
+        """Compte à rebours visuel"""
+        try:
+            if seconds < 1 or seconds > 300:  # Max 5 minutes
+                return await ctx.send("❌ Le countdown doit être entre 1 et 300 secondes.")
+            
+            # Envoyer le message initial
+            embed = nextcord.Embed(
+                title="⏰ Compte à Rebours",
+                description=f"**Temps:** {seconds} secondes\n**Message:** {message}",
+                color=0x3498db,
+                timestamp=datetime.datetime.now()
+            )
+            embed.set_footer(text=f"Countdown de {ctx.author.name}")
+            
+            msg = await ctx.send(embed=embed)
+            
+            # Compte à rebours
+            for i in range(seconds, 0, -1):
+                if i % 10 == 0 or i <= 5:  # Afficher toutes les 10 secondes et les 5 dernières
+                    countdown_embed = nextcord.Embed(
+                        title="⏰ Compte à Rebours",
+                        description=f"**Temps restant:** {i} secondes",
+                        color=0xe74c3c if i <= 5 else 0xf39c12,
+                        timestamp=datetime.datetime.now()
+                    )
+                    countdown_embed.set_footer(text=f"Countdown de {ctx.author.name}")
+                    
+                    await msg.edit(embed=countdown_embed)
+                    await asyncio.sleep(1)
+                else:
+                    await asyncio.sleep(1)
+            
+            # Message final
+            final_embed = nextcord.Embed(
+                title="🎉 Compte à Rebours Terminé !",
+                description=f"**Message:** {message}",
+                color=0x2ecc71,
+                timestamp=datetime.datetime.now()
+            )
+            final_embed.set_footer(text=f"Countdown de {ctx.author.name}")
+            
+            await msg.edit(embed=final_embed)
+            
+        except Exception as e:
+            await ctx.send(f"❌ Erreur: {e}")
+
 def setup(bot):
     bot.add_cog(UtilityEnhanced(bot))

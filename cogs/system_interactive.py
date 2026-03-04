@@ -288,6 +288,7 @@ class SystemInteractive(commands.Cog):
                 ("urban", "Définition Urban Dictionary", "+urban <terme>", "Tout le monde"),
                 ("timer", "Démarrer un minuteur", "+timer 30s/5m/1h [message]", "Tout le monde"),
                 ("stopwatch", "Démarrer un chronomètre", "+stopwatch", "Tout le monde"),
+                ("countdown", "Compte à rebours visuel", "+countdown <secondes> [message]", "Tout le monde"),
                 ("remind", "Créer un rappel", "+remind 30s/5m/1h <message>", "Tout le monde"),
                 ("reminders", "Voir ses rappels", "+reminders", "Tout le monde"),
                 ("logs_event", "Voir les logs d'événements", "+logs_event list/clear/export <type>", "Admin/Modo"),
