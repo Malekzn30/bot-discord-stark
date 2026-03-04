@@ -215,16 +215,13 @@ class SystemInteractive(commands.Cog):
                 ("clearwarns", "Supprimer tous les warns d'un membre", "+clearwarns @membre", "Admin"),
                 ("mute", "Rendre muet un membre", "+mute @membre [durée] <raison>", "Admin/Modo"),
                 ("unmute", "Rendre la parole à un membre", "+unmute @membre", "Admin/Modo"),
-                ("tempban", "Bannir temporairement un membre", "+tempban @membre <durée> <raison>", "Admin"),
                 ("kick", "Expulser un membre", "+kick @membre <raison>", "Admin/Modo"),
                 ("ban", "Bannir un membre", "+ban @membre <raison>", "Admin"),
+                ("tempban", "Bannir temporairement un membre", "+tempban @membre <durée> <raison>", "Admin"),
                 ("slowmode", "Activer le mode lent", "+slowmode [secondes]", "Admin/Modo"),
-                ("lockdown", "Verrouiller le serveur", "+lockdown", "Admin"),
-                ("unlockdown", "Déverrouiller le serveur", "+unlockdown", "Admin"),
-                ("modlogs", "Voir les logs de modération", "+modlogs", "Admin/Modo"),
-                ("clear", "Supprimer des messages", "+clear <nombre>", "Admin/Modo"),
-                ("nuke", "Supprimer tout un salon", "+nuke", "Admin"),
-                ("antiraid", "Activer l'anti-raid", "+antiraid", "Admin")
+                ("lockdown", "Verrouiller le serveur", "+lockdown", "Admin/Modo"),
+                ("unlockdown", "Déverrouiller le serveur", "+unlockdown", "Admin/Modo"),
+                ("clearcache", "Vider le cache du bot", "+clearcache [type]", "Admin")
             ]
             
             await self.show_paginated_commands(interaction, "🛡️ Modération Avancée", commands, 0x3498db)
@@ -266,13 +263,7 @@ class SystemInteractive(commands.Cog):
                 ("dice", "Lancer un dé", "+dice [faces]", "Tout le monde"),
                 ("coin", "Pile ou face", "+coin", "Tout le monde"),
                 ("rps", "Pierre feuille ciseaux", "+rps <pierre|feuille|ciseaux>", "Tout le monde"),
-                ("devinelenombre", "Jeu de devinette de nombre", "+devinelenombre", "Tout le monde"),
-                ("8ball", "Boule magique 8", "+8ball <question>", "Tout le monde"),
-                ("truth", "Question pour vérité", "+truth [catégorie]", "Tout le monde"),
-                ("dare", "Action pour un défi", "+dare [intensité]", "Tout le monde"),
-                ("wyr", "Préfères-tu (Would You Rather)", "+wyr", "Tout le monde"),
-                ("rate", "Noter quelque chose", "+rate [chose]", "Tout le monde"),
-                ("ship", "Calculer le 'ship' entre deux utilisateurs", "+ship [@user1] [@user2]", "Tout le monde")
+                ("8ball", "Boule magique 8", "+8ball <question>", "Tout le monde")
             ]
             
             await self.show_paginated_commands(interaction, "🎮 Jeux et Divertissement", commands, 0xF39C12)
@@ -283,13 +274,7 @@ class SystemInteractive(commands.Cog):
                 ("suggest", "Faire une suggestion", "+suggest <idée>", "Tout le monde"),
                 ("poll", "Créer un sondage", "+poll <question> [options]", "Admin/Modo"),
                 ("giveaway", "Lancer un giveaway", "+giveaway <temps> <prix>", "Admin/Modo"),
-                ("vote", "Voter pour une suggestion", "+vote <numéro>", "Tout le monde"),
-                ("suggestions", "Voir les suggestions", "+suggestions", "Tout le monde"),
-                ("announce", "Faire une annonce", "+announce <message>", "Admin/Modo"),
-                ("welcome", "Message de bienvenue", "+welcome @membre", "Admin/Modo"),
-                ("goodbye", "Message d'au revoir", "+goodbye @membre", "Admin/Modo"),
-                ("birthday", "Enregistrer un anniversaire", "+birthday @membre <date>", "Tout le monde"),
-                ("birthdays", "Voir les anniversaires", "+birthdays", "Tout le monde")
+                ("setsuggestions", "Définir le salon des suggestions", "+setsuggestions #salon", "Admin")
             ]
             
             await self.show_paginated_commands(interaction, "🎉 Fonctionnalités Communautaires", commands, 0x9B59B6)
@@ -316,15 +301,16 @@ class SystemInteractive(commands.Cog):
         async def show_fun_help(self, interaction):
             """Afficher l'aide fun avec pagination"""
             commands = [
-                ("meme", "Afficher un mème aléatoire", "+meme", "Tout le monde"),
+                ("meme", "Afficher un mème aléatoire", "+meme [catégorie]", "Tout le monde"),
                 ("joke", "Blague aléatoire", "+joke", "Tout le monde"),
+                ("truth", "Question pour vérité", "+truth [catégorie]", "Tout le monde"),
+                ("dare", "Action pour un défi", "+dare [intensité]", "Tout le monde"),
+                ("wyr", "Préfères-tu (Would You Rather)", "+wyr", "Tout le monde"),
+                ("rate", "Noter quelque chose", "+rate [chose]", "Tout le monde"),
+                ("ship", "Calculer le 'ship' entre deux utilisateurs", "+ship [@user1] [@user2]", "Tout le monde"),
                 ("ascii", "Convertir en texte ASCII", "+ascii <texte>", "Tout le monde"),
-                ("emoji", "Afficher un emoji en grand", "+emoji <emoji>", "Tout le monde"),
-                ("flip", "Retourner du texte", "+flip <texte>", "Tout le monde"),
-                ("say", "Faire parler le bot", "+say <message>", "Admin/Modo"),
+                ("emojify", "Transformer un texte en émojis", "+emojify <texte>", "Tout le monde"),
                 ("reverse", "Écrire à l'envers", "+reverse <texte>", "Tout le monde"),
-                ("zalgofy", "Texte en Zalgo", "+zalgofy <texte>", "Tout le monde"),
-                ("vaporwave", "Texte en vaporwave", "+vaporwave <texte>", "Tout le monde"),
                 ("clap", "Texte avec clap", "+clap <texte>", "Tout le monde")
             ]
             
@@ -333,26 +319,21 @@ class SystemInteractive(commands.Cog):
         async def show_extended_help(self, interaction):
             """Afficher l'aide étendue avec pagination"""
             commands = [
-                ("todo", "Gérer sa liste de tâches", "+todo <add/remove/list>", "Tout le monde"),
-                ("rank", "Voir son rang", "+rank [@membre]", "Tout le monde"),
-                ("play", "Jouer de la musique", "+play <titre/URL>", "Tout le monde"),
-                ("skip", "Passer la musique", "+skip", "Tout le monde"),
-                ("queue", "Voir la file d'attente", "+queue", "Tout le monde"),
-                ("stop", "Arrêter la musique", "+stop", "Tout le monde"),
-                ("volume", "Régler le volume", "+volume <0-100>", "Tout le monde"),
-                ("weather", "Météo d'une ville", "+weather <ville>", "Tout le monde"),
-                ("news", "Dernières actualités", "+news [sujet]", "Tout le monde"),
-                ("crypto", "Prix des cryptomonnaies", "+crypto <monnaie>", "Tout le monde"),
-                ("stock", "Prix des actions", "+stock <symbole>", "Tout le monde"),
+                ("remind", "Créer un rappel", "+remind <temps> <message>", "Tout le monde"),
+                ("reminders", "Voir ses rappels", "+reminders", "Tout le monde"),
+                ("timer", "Démarrer un minuteur", "+timer <temps>", "Tout le monde"),
+                ("stopwatch", "Chronomètre", "+stopwatch", "Tout le monde"),
+                ("countdown", "Compte à rebours", "+countdown <temps>", "Admin/Modo"),
+                ("ping", "Voir la latence du bot", "+ping", "Tout le monde"),
+                ("afk", "Mettre son statut AFK", "+afk [raison]", "Tout le monde"),
+                ("snipe", "Voir le dernier message supprimé", "+snipe", "Tout le monde"),
+                ("calc", "Calculatrice", "+calc <expression>", "Tout le monde"),
                 ("translate", "Traduire un texte", "+translate <langue> <texte>", "Tout le monde"),
-                ("wiki", "Rechercher sur Wikipédia", "+wiki <terme>", "Tout le monde"),
-                ("youtube", "Rechercher sur YouTube", "+youtube <terme>", "Tout le monde"),
-                ("google", "Rechercher sur Google", "+google <terme>", "Tout le monde"),
-                ("image", "Rechercher une image", "+image <terme>", "Tout le monde"),
-                ("gif", "Rechercher un GIF", "+gif <terme>", "Tout le monde")
+                ("weather", "Météo d'une ville", "+weather <ville>", "Tout le monde"),
+                ("urban", "Définition Urban Dictionary", "+urban <terme>", "Tout le monde")
             ]
             
-            await self.show_paginated_commands(interaction, "🚀 Commandes Étendues", commands, 0x2ECC71)
+            await self.show_paginated_commands(interaction, "🚀 Commandes Utilitaires Avancées", commands, 0x2ECC71)
 
         async def show_config_help(self, interaction):
             """Afficher l'aide de configuration avec pagination"""
@@ -363,10 +344,9 @@ class SystemInteractive(commands.Cog):
                 ("setprefix", "Changer le préfixe", "+setprefix <préfixe>", "Admin"),
                 ("setwelcome", "Configurer le message de bienvenue", "+setwelcome <message>", "Admin"),
                 ("setgoodbye", "Configurer le message d'au revoir", "+setgoodbye <message>", "Admin"),
-                ("setlogs", "Configurer les logs", "+setlogs #salon", "Admin"),
-                ("autorole", "Configurer les rôles automatiques", "+autorole @rôle", "Admin"),
-                ("levelup", "Configurer les niveaux", "+levelup <on/off>", "Admin"),
-                ("backup", "Sauvegarder la configuration", "+backup", "Admin")
+                ("setlevelup", "Configurer les niveaux", "+setlevelup <message>", "Admin"),
+                ("autorole", "Configurer les rôles automatiques", "+autorole <add/remove> @rôle", "Admin"),
+                ("voice_backup", "Sauvegarder distribution vocale", "+voice_backup #catégorie", "Admin")
             ]
             
             await self.show_paginated_commands(interaction, "⚙️ Configuration du Bot", commands, 0x95A5A6)
@@ -439,7 +419,7 @@ class SystemInteractive(commands.Cog):
             # Créer l'embed du menu principal
             embed = nextcord.Embed(
                 title="🤖 Bot Stark - Menu Interactif",
-                description="**150+ Commandes** organisées par catégories\n\n👇 **Choisis une catégorie ci-dessous**",
+                description="**195+ Commandes** organisées par catégories\n\n👇 **Choisis une catégorie ci-dessous**",
                 color=0x3498db,
                 timestamp=datetime.datetime.now()
             )
@@ -449,7 +429,7 @@ class SystemInteractive(commands.Cog):
             # Statistiques
             embed.add_field(
                 name="📊 Statistiques",
-                value=f"**Total:** 152+ commandes\n**Catégories:** 9\n**Prefixe:** `+`\n**Permissions:** Configurables",
+                value=f"**Total:** 195+ commandes\n**Catégories:** 9\n**Prefixe:** `+`\n**Permissions:** Configurables",
                 inline=False
             )
             
@@ -466,42 +446,42 @@ class SystemInteractive(commands.Cog):
             view.category_select.options = [
                 nextcord.SelectOption(
                     label="🛡️ Modération",
-                    description="15 commandes de modération avancée",
+                    description="7 commandes de modération avancée",
                     emoji="🛡️"
                 ),
                 nextcord.SelectOption(
                     label="🎤 Vocal",
-                    description="23 commandes de gestion vocale",
+                    description="83 commandes de gestion vocale",
                     emoji="🎤"
                 ),
                 nextcord.SelectOption(
                     label="🎮 Jeux",
-                    description="10 commandes de jeux et divertissement",
+                    description="9 commandes de jeux et divertissement",
                     emoji="🎮"
                 ),
                 nextcord.SelectOption(
                     label="🎉 Communauté",
-                    description="10 commandes communautaires",
+                    description="11 commandes communautaires",
                     emoji="🎉"
                 ),
                 nextcord.SelectOption(
                     label="🛠️ Utilitaires",
-                    description="12 commandes utilitaires",
+                    description="13 commandes utilitaires",
                     emoji="🛠️"
                 ),
                 nextcord.SelectOption(
                     label="😂 Fun",
-                    description="10 commandes d'amusement",
+                    description="15 commandes d'amusement",
                     emoji="😂"
                 ),
                 nextcord.SelectOption(
                     label="🚀 Étendu",
-                    description="17 commandes avancées",
+                    description="6 commandes utilitaires avancées",
                     emoji="🚀"
                 ),
                 nextcord.SelectOption(
                     label="⚙️ Configuration",
-                    description="10 commandes de configuration",
+                    description="17 commandes de configuration",
                     emoji="⚙️"
                 ),
                 nextcord.SelectOption(
