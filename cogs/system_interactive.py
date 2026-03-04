@@ -210,27 +210,25 @@ class SystemInteractive(commands.Cog):
         async def show_moderation_help(self, interaction):
             """Afficher l'aide de la modération avec pagination"""
             commands = [
-                ("warn", "Avertir un membre avec système de points", "+warn @membre <raison>", "Admin/Modo"),
+                ("warn", "Avertir un membre", "+warn @membre <raison>", "Admin/Modo"),
                 ("warns", "Voir les warns d'un membre", "+warns [@membre]", "Admin/Modo"),
-                ("clearwarns", "Supprimer tous les warns d'un membre", "+clearwarns @membre", "Admin"),
+                ("clearwarns", "Supprimer tous les warns", "+clearwarns @membre", "Admin"),
                 ("mute", "Rendre muet un membre", "+mute @membre [durée] <raison>", "Admin/Modo"),
                 ("unmute", "Rendre la parole à un membre", "+unmute @membre", "Admin/Modo"),
-                ("kick", "Expulser un membre", "+kick @membre <raison>", "Admin/Modo"),
-                ("ban", "Bannir un membre", "+ban @membre <raison>", "Admin"),
-                ("tempban", "Bannir temporairement un membre", "+tempban @membre <durée> <raison>", "Admin"),
+                ("tempban", "Bannir temporairement", "+tempban @membre <durée> <raison>", "Admin"),
                 ("slowmode", "Activer le mode lent", "+slowmode [secondes]", "Admin/Modo"),
                 ("lockdown", "Verrouiller le serveur", "+lockdown", "Admin/Modo"),
                 ("unlockdown", "Déverrouiller le serveur", "+unlockdown", "Admin/Modo"),
-                ("clearcache", "Vider le cache du bot", "+clearcache [type]", "Admin")
+                ("clearcache", "Vider le cache", "+clearcache", "Admin")
             ]
             
-            await self.show_paginated_commands(interaction, "🛡️ Modération Avancée", commands, 0x3498db)
+            await self.show_paginated_commands(interaction, "🛡️ Modération", commands, 0x3498db)
 
         async def show_vocal_help(self, interaction):
             """Afficher l'aide du vocal avec pagination"""
             commands = [
                 ("déplacer", "Déplacer un membre en vocal", "+déplacer @membre #salon", "Admin/Modo"),
-                ("lockmember", "Bloquer un membre dans son salon vocal", "+lockmember @membre", "Admin/Modo"),
+                ("lockmember", "Bloquer un membre vocal", "+lockmember @membre", "Admin/Modo"),
                 ("unlockmember", "Débloquer un membre vocal", "+unlockmember @membre", "Admin/Modo"),
                 ("equilibrer", "Équilibrer les salons vocaux", "+equilibrer @catégorie <nombre>", "Admin/Modo"),
                 ("equilibrer_auto", "Équilibrage automatique", "+equilibrer_auto @catégorie", "Admin/Modo"),
@@ -242,9 +240,9 @@ class SystemInteractive(commands.Cog):
                 ("gather_all", "Rassembler tout le monde", "+gather_all #salon", "Admin/Modo"),
                 ("create_voice_rooms", "Créer des salons vocaux", "+create_voice_rooms #cat <nombre> <nom>", "Admin"),
                 ("clone_voice_channel", "Cloner un salon vocal", "+clone_voice_channel #salon <nom>", "Admin"),
-                ("swap_channels", "Échanger les membres entre salons", "+swap_channels #salon1 #salon2", "Admin"),
-                ("tempvoice", "Créer un salon vocal temporaire", "+tempvoice [nom]", "Tout le monde"),
-                ("voice_activity", "Activité détaillée", "+voice_activity #catégorie", "Admin/Modo"),
+                ("swap_channels", "Échanger les membres", "+swap_channels #salon1 #salon2", "Admin"),
+                ("tempvoice", "Salon vocal temporaire", "+tempvoice [nom]", "Tout le monde"),
+                ("voice_activity", "Activité vocale détaillée", "+voice_activity #catégorie", "Admin/Modo"),
                 ("move_afk", "Déplacer les membres AFK", "+move_afk #afk <minutes>", "Admin/Modo"),
                 ("voice_backup", "Sauvegarder distribution", "+voice_backup #catégorie", "Admin"),
                 ("voice_restore", "Restaurer distribution", "+voice_restore <fichier>", "Admin"),
@@ -252,10 +250,10 @@ class SystemInteractive(commands.Cog):
                 ("voice_cleanup", "Nettoyer les salons vides", "+voice_cleanup", "Admin/Modo"),
                 ("lockvoice", "Verrouiller un salon vocal", "+lockvoice #salon", "Admin/Modo"),
                 ("unlockvoice", "Déverrouiller un salon vocal", "+unlockvoice #salon", "Admin/Modo"),
-                ("moove", "Déplacer un membre (alias)", "+moove @membre #salon", "Admin/Modo")
+                ("moove", "Déplacer un membre", "+moove @membre #salon", "Admin/Modo")
             ]
             
-            await self.show_paginated_commands(interaction, "🎤 Gestion Vocale Complète", commands, 0x1ABC9C)
+            await self.show_paginated_commands(interaction, "🎤 Gestion Vocale", commands, 0x1ABC9C)
 
         async def show_games_help(self, interaction):
             """Afficher l'aide des jeux avec pagination"""
@@ -288,11 +286,11 @@ class SystemInteractive(commands.Cog):
                 ("translate", "Traduire un texte", "+translate <langue> <texte>", "Tout le monde"),
                 ("weather", "Météo d'une ville", "+weather <ville>", "Tout le monde"),
                 ("urban", "Définition Urban Dictionary", "+urban <terme>", "Tout le monde"),
-                ("remind", "Créer un rappel", "+remind <temps> <message>", "Tout le monde"),
+                ("timer", "Démarrer un minuteur", "+timer 30s/5m/1h [message]", "Tout le monde"),
+                ("stopwatch", "Démarrer un chronomètre", "+stopwatch", "Tout le monde"),
+                ("remind", "Créer un rappel", "+remind 30s/5m/1h <message>", "Tout le monde"),
                 ("reminders", "Voir ses rappels", "+reminders", "Tout le monde"),
-                ("timer", "Démarrer un minuteur", "+timer <temps>", "Tout le monde"),
-                ("stopwatch", "Chronomètre", "+stopwatch", "Tout le monde"),
-                ("countdown", "Compte à rebours", "+countdown <temps>", "Admin/Modo"),
+                ("logs_event", "Voir les logs d'événements", "+logs_event list/clear/export <type>", "Admin/Modo"),
                 ("ping", "Voir la latence du bot", "+ping", "Tout le monde")
             ]
             
@@ -419,7 +417,7 @@ class SystemInteractive(commands.Cog):
             # Créer l'embed du menu principal
             embed = nextcord.Embed(
                 title="🤖 Bot Stark - Menu Interactif",
-                description="**195+ Commandes** organisées par catégories\n\n👇 **Choisis une catégorie ci-dessous**",
+                description="**193+ Commandes** organisées par catégories\n\n👇 **Choisis une catégorie ci-dessous**",
                 color=0x3498db,
                 timestamp=datetime.datetime.now()
             )
@@ -429,7 +427,7 @@ class SystemInteractive(commands.Cog):
             # Statistiques
             embed.add_field(
                 name="📊 Statistiques",
-                value=f"**Total:** 195+ commandes\n**Catégories:** 9\n**Prefixe:** `+`\n**Permissions:** Configurables",
+                value=f"**Total:** 193+ commandes\n**Catégories:** 9\n**Prefixe:** `+`\n**Permissions:** Configurables",
                 inline=False
             )
             
@@ -446,42 +444,42 @@ class SystemInteractive(commands.Cog):
             view.category_select.options = [
                 nextcord.SelectOption(
                     label="🛡️ Modération",
-                    description="7 commandes de modération avancée",
+                    description="10 commandes de modération",
                     emoji="🛡️"
                 ),
                 nextcord.SelectOption(
                     label="🎤 Vocal",
-                    description="83 commandes de gestion vocale",
+                    description="23 commandes de gestion vocale",
                     emoji="🎤"
                 ),
                 nextcord.SelectOption(
                     label="🎮 Jeux",
-                    description="9 commandes de jeux et divertissement",
+                    description="4 commandes de jeux",
                     emoji="🎮"
                 ),
                 nextcord.SelectOption(
                     label="🎉 Communauté",
-                    description="11 commandes communautaires",
+                    description="4 commandes communautaires",
                     emoji="🎉"
                 ),
                 nextcord.SelectOption(
                     label="🛠️ Utilitaires",
-                    description="13 commandes utilitaires",
+                    description="12 commandes utilitaires",
                     emoji="🛠️"
                 ),
                 nextcord.SelectOption(
                     label="😂 Fun",
-                    description="15 commandes d'amusement",
+                    description="11 commandes d'amusement",
                     emoji="😂"
                 ),
                 nextcord.SelectOption(
                     label="🚀 Étendu",
-                    description="6 commandes utilitaires avancées",
+                    description="12 commandes avancées",
                     emoji="🚀"
                 ),
                 nextcord.SelectOption(
                     label="⚙️ Configuration",
-                    description="17 commandes de configuration",
+                    description="9 commandes de configuration",
                     emoji="⚙️"
                 ),
                 nextcord.SelectOption(
