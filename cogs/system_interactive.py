@@ -425,12 +425,104 @@ class SystemInteractive(commands.Cog):
     async def help_interactive(self, ctx):
         """Système d'aide interactif avec menu déroulant et pagination"""
         
-        # Créer la vue interactive
-        view = self.HelpView(self.bot, ctx.author)
+        # Vérifications de permissions
+        if not ctx.channel.permissions_for(ctx.guild.me).send_messages:
+            return await ctx.author.send("❌ Je n'ai pas la permission d'envoyer des messages dans ce salon.")
         
-        # Envoyer le message initial
-        await view.show_main_menu(ctx)
-        view.message = await ctx.fetch_message(ctx.channel.last_message_id)
+        if not ctx.channel.permissions_for(ctx.guild.me).embed_links:
+            return await ctx.send("❌ Je n'ai pas la permission d'envoyer des embeds dans ce salon.")
+        
+        try:
+            # Créer la vue interactive
+            view = self.HelpView(self.bot, ctx.author)
+            
+            # Créer l'embed du menu principal
+            embed = nextcord.Embed(
+                title="🤖 Bot Stark - Menu Interactif",
+                description="**150+ Commandes** organisées par catégories\n\n👇 **Choisis une catégorie ci-dessous**",
+                color=0x3498db,
+                timestamp=datetime.datetime.now()
+            )
+            
+            embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
+            
+            # Statistiques
+            embed.add_field(
+                name="📊 Statistiques",
+                value=f"**Total:** 152+ commandes\n**Catégories:** 9\n**Prefixe:** `+`\n**Permissions:** Configurables",
+                inline=False
+            )
+            
+            # Instructions
+            embed.add_field(
+                name="🎯 Comment utiliser",
+                value="1. **Sélectionne une catégorie** dans le menu déroulant\n2. **Navigue** entre les pages avec les boutons\n3. **Retour** au menu principal avec le bouton 🔙",
+                inline=False
+            )
+            
+            embed.set_footer(text=f"Demandé par {ctx.author.name} • Utilise +help <commande> pour l'aide spécifique")
+            
+            # Mettre à jour le sélecteur
+            view.category_select.options = [
+                nextcord.SelectOption(
+                    label="🛡️ Modération",
+                    description="15 commandes de modération avancée",
+                    emoji="🛡️"
+                ),
+                nextcord.SelectOption(
+                    label="🎤 Vocal",
+                    description="23 commandes de gestion vocale",
+                    emoji="🎤"
+                ),
+                nextcord.SelectOption(
+                    label="🎮 Jeux",
+                    description="10 commandes de jeux et divertissement",
+                    emoji="🎮"
+                ),
+                nextcord.SelectOption(
+                    label="🎉 Communauté",
+                    description="10 commandes communautaires",
+                    emoji="🎉"
+                ),
+                nextcord.SelectOption(
+                    label="🛠️ Utilitaires",
+                    description="12 commandes utilitaires",
+                    emoji="🛠️"
+                ),
+                nextcord.SelectOption(
+                    label="😂 Fun",
+                    description="10 commandes d'amusement",
+                    emoji="😂"
+                ),
+                nextcord.SelectOption(
+                    label="🚀 Étendu",
+                    description="17 commandes avancées",
+                    emoji="🚀"
+                ),
+                nextcord.SelectOption(
+                    label="⚙️ Configuration",
+                    description="10 commandes de configuration",
+                    emoji="⚙️"
+                ),
+                nextcord.SelectOption(
+                    label="📊 Performance",
+                    description="4 commandes de monitoring",
+                    emoji="📊"
+                )
+            ]
+            
+            # Mettre à jour les boutons
+            view.previous_button.disabled = True
+            view.next_button.disabled = True
+            view.back_button.disabled = True
+            
+            # Envoyer le message et stocker la référence
+            message = await ctx.send(embed=embed, view=view)
+            view.message = message
+            
+        except Exception as e:
+            print(f"[HELP ERROR] {e}")
+            await ctx.send(f"❌ Erreur lors de l'affichage de l'aide: {str(e)}")
 
 def setup(bot):
     bot.add_cog(SystemInteractive(bot))
