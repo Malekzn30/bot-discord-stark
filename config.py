@@ -30,16 +30,19 @@ cogs = [
     "cogs.community_features", 
     "cogs.utility_commands",
     "cogs.fun_commands",
-    "cogs.extended_commands",
     "cogs.performance_optimizer",
     "cogs.vocal",
     "cogs.social",
     "cogs.antimod",
-    "cogs.system",
-    "cogs.rolemanager",
-    "cogs.config_panel",
     "cogs.system_interactive",
-    "cogs.bot_customization"
+    "cogs.rolemanager",
+    "cogs.bot_customization",
+    "cogs.logs",
+    "cogs.games",
+    "cogs.dm",
+    "cogs.welcome",
+    "cogs.tickets",
+    "cogs.server_config"
 ]
 
 # ============= CONFIGURATION VOICE =============
