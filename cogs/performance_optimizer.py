@@ -19,7 +19,10 @@ class PerformanceOptimizer(commands.Cog):
             "cpu_usage": [],
             "response_times": []
         }
-        
+    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Démarrer le monitoring quand le bot est prêt"""
         # Démarrer le monitoring
         self.bot.loop.create_task(self.performance_monitor())
         self.bot.loop.create_task(self.auto_cleanup())

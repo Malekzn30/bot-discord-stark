@@ -123,6 +123,11 @@ if __name__ == "__main__":
 
     # Charger les cogs
     load_cogs()
+    
+    # Vérifier les commandes chargées
+    print(f"[START] {len(bot.commands)} commandes chargées")
+    for cmd in bot.commands:
+        print(f"[CMD] {cmd.name}")
 
     # Lancer le bot Discord
     bot.run(TOKEN)
