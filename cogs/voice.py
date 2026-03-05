@@ -34,6 +34,32 @@ class Voice(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    @commands.command(name="voice")
+    @has_role()
+    async def voice_help(self, ctx):
+        """Affiche l'aide pour les commandes vocales"""
+        embed = nextcord.Embed(
+            title="🎤 Commandes Vocales",
+            description="Voici toutes les commandes de gestion vocale:",
+            color=0x3498db
+        )
+        
+        commands_list = [
+            ("+déplacer @user #channel", "Déplacer un utilisateur"),
+            ("+mooveusers @user1 @user2 #channel", "Déplacer plusieurs utilisateurs"),
+            ("+mooveall #channel", "Déplacer tout le salon vocal"),
+            ("+shuffle", "Mélanger les utilisateurs"),
+            ("+back", "Revenir au salon précédent"),
+            ("+clearvoice #channel", "Vider un salon vocal"),
+            ("+voiceinfo", "Informations sur les salons vocaux")
+        ]
+        
+        for cmd, desc in commands_list:
+            embed.add_field(name=cmd, value=desc, inline=False)
+            
+        embed.set_footer(text="Rôle requis: Staff")
+        await ctx.send(embed=embed)
+
     # ============================================================
     # 1) MOOVE 1 PERSONNE → 1 SALON
     # ============================================================

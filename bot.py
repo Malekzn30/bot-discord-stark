@@ -108,6 +108,39 @@ def keep_alive():
             pass
         time.sleep(300)
 
+# Commande help par défaut
+@bot.command()
+async def help(ctx, command_name=None):
+    """Affiche l'aide du bot"""
+    if command_name:
+        cmd = bot.get_command(command_name)
+        if cmd:
+            embed = nextcord.Embed(
+                title=f"📖 Aide: {cmd.name}",
+                description=cmd.help or "Aucune description disponible",
+                color=0x3498db
+            )
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send("❌ Commande introuvable")
+    else:
+        embed = nextcord.Embed(
+            title="🤖 StarK92 Bot - Aide",
+            description="Voici les commandes disponibles:",
+            color=0x3498db
+        )
+        
+        # Compter les commandes par catégorie
+        voice_commands = [cmd for cmd in bot.commands if hasattr(cmd.cog, '__class__') and cmd.cog.__class__.__name__ == 'Voice']
+        other_commands = [cmd for cmd in bot.commands if cmd not in voice_commands]
+        
+        embed.add_field(name="🎤 Vocal", value=f"{len(voice_commands)} commandes", inline=True)
+        embed.add_field(name="🔧 Autres", value=f"{len(other_commands)} commandes", inline=True)
+        embed.add_field(name="📊 Total", value=f"{len(bot.commands)} commandes", inline=True)
+        embed.set_footer(text="Utilise +help <commande> pour plus d'infos")
+        
+        await ctx.send(embed=embed)
+
 # ============================
 # LANCEMENT
 # ============================
