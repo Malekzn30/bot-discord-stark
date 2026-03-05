@@ -351,7 +351,7 @@ class Voice(commands.Cog):
                 return
 
         # Lancement du shuffle
-        task = asyncio.create_task(shuffle_loop())
+        task = self.bot.loop.create_task(shuffle_loop())
         shuffle_tasks[member.id] = task
 
         await ctx.send(embed=embed_msg("🔄 Shuffle lancé", f"{member.mention} est maintenant en shuffle."))
@@ -705,7 +705,7 @@ class Voice(commands.Cog):
         
         # Démarrer une tâche pour le ramener automatiquement s'il essaie de bouger
         if member.id not in shuffle_tasks:
-            shuffle_tasks[member.id] = asyncio.create_task(self._auto_move_back(member, channel))
+            shuffle_tasks[member.id] = self.bot.loop.create_task(self._auto_move_back(member, channel))
 
         await ctx.send(embed=embed_msg("🔒 Membre verrouillé", f"{member.mention} est maintenant bloqué dans {format_channel(channel)}"))
         

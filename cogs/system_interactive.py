@@ -55,7 +55,7 @@ class SystemInteractive(commands.Cog):
                 "🛡️ Modération": "moderation",
                 "🎤 Vocal": "vocal", 
                 "🎮 Jeux": "games",
-                "🎉 Communauté": "community",
+                "🎉 Communauté": "community",1
                 "🛠️ Utilitaires": "utility",
                 "😂 Fun": "fun",
                 "🚀 Étendu": "extended",
