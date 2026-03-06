@@ -56,8 +56,14 @@ async def on_command_error(ctx, error):
 @tasks.loop(minutes=10)
 async def cleanup_aggressive():
     try:
-        from cogs.games import cleanup_games
-        cleanup_games()
+        # Essayer d'importer depuis le cog games
+        try:
+            from cogs.games import cleanup_games
+            cleanup_games()
+        except ImportError:
+            # Si le cog n'est pas chargé, ignorer
+            pass
+        
         gc.collect()
         print("[GC] Mémoire nettoyée")
     except Exception as e:
@@ -183,34 +189,61 @@ def keep_alive():
 
 # Commande help par défaut
 @bot.command()
-async def help(ctx, command_name=None):
-    """Affiche l'aide du bot"""
-    if command_name:
-        cmd = bot.get_command(command_name)
-        if cmd:
-            embed = nextcord.Embed(
-                title=f"📖 Aide: {cmd.name}",
-                description=cmd.help or "Aucune description disponible",
-                color=0x3498db
-            )
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send("❌ Commande introuvable")
-    else:
+async def help(ctx, category: str = None):
+    """Affiche l'aide du bot avec toutes les commandes"""
+    if category:
+        # Aide par catégorie
+        category_commands = []
+        for cmd in bot.commands:
+            if cmd.cog and cmd.cog.__class__.__name__.lower() == category.lower():
+                category_commands.append(cmd)
+        
+        if not category_commands:
+            return await ctx.send(f"❌ Catégorie `{category}` non trouvée")
+        
         embed = nextcord.Embed(
-            title="🤖 StarK92 Bot - Aide",
-            description="Voici les commandes disponibles:",
+            title=f"📖 Aide: {category.title()}",
+            description=f"**{len(category_commands)} commandes**",
             color=0x3498db
         )
         
-        # Compter les commandes par catégorie
-        voice_commands = [cmd for cmd in bot.commands if hasattr(cmd.cog, '__class__') and cmd.cog.__class__.__name__ == 'Voice']
-        other_commands = [cmd for cmd in bot.commands if cmd not in voice_commands]
+        for cmd in sorted(category_commands, key=lambda x: x.name):
+            help_text = cmd.help or "Aucune description"
+            embed.add_field(name=f"+{cmd.name}", value=help_text[:100], inline=False)
         
-        embed.add_field(name="🎤 Vocal", value=f"{len(voice_commands)} commandes", inline=True)
-        embed.add_field(name="🔧 Autres", value=f"{len(other_commands)} commandes", inline=True)
-        embed.add_field(name="📊 Total", value=f"{len(bot.commands)} commandes", inline=True)
-        embed.set_footer(text="Utilise +help <commande> pour plus d'infos")
+        await ctx.send(embed=embed)
+    else:
+        # Aide générale avec catégories
+        embed = nextcord.Embed(
+            title="🤖 StarK92 Bot - Aide Complète",
+            description=f"**Total: {len(bot.commands)} commandes**",
+            color=0x3498db
+        )
+        
+        # Regrouper par catégories
+        from collections import Counter
+        categories = {}
+        for cmd in bot.commands:
+            cog_name = cmd.cog.__class__.__name__ if cmd.cog else "Inconnu"
+            if cog_name not in categories:
+                categories[cog_name] = []
+            categories[cog_name].append(cmd)
+        
+        # Afficher les catégories
+        for cog_name, cmds in sorted(categories.items(), key=lambda x: len(x[1]), reverse=True):
+            embed.add_field(
+                name=f"� {cog_name}", 
+                value=f"**{len(cmds)} commandes**\n`+help {cog_name.lower()}` pour voir les détails",
+                inline=False
+            )
+        
+        embed.add_field(
+            name="� Recherche",
+            value="`+help <nom_commande>` pour voir une commande spécifique",
+            inline=False
+        )
+        
+        embed.set_footer(text="Utilise +help <catégorie> pour voir les commandes d'une catégorie")
         
         await ctx.send(embed=embed)
 
