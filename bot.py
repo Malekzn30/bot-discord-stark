@@ -207,9 +207,15 @@ async def help(ctx, category: str = None):
             color=0x3498db
         )
         
-        for cmd in sorted(category_commands, key=lambda x: x.name):
+        # Limiter à 25 commandes par embed
+        commands_to_show = sorted(category_commands, key=lambda x: x.name)[:25]
+        
+        for cmd in commands_to_show:
             help_text = cmd.help or "Aucune description"
             embed.add_field(name=f"+{cmd.name}", value=help_text[:100], inline=False)
+        
+        if len(category_commands) > 25:
+            embed.set_footer(text=f"25/{len(category_commands)} commandes affichées")
         
         await ctx.send(embed=embed)
     else:
@@ -229,17 +235,22 @@ async def help(ctx, category: str = None):
                 categories[cog_name] = []
             categories[cog_name].append(cmd)
         
-        # Afficher les catégories
-        for cog_name, cmds in sorted(categories.items(), key=lambda x: len(x[1]), reverse=True):
+        # Afficher les catégories (limité à 25)
+        sorted_categories = sorted(categories.items(), key=lambda x: len(x[1]), reverse=True)
+        
+        for i, (cog_name, cmds) in enumerate(sorted_categories):
+            if i >= 25:  # Limite de Discord
+                break
+            
             embed.add_field(
-                name=f"� {cog_name}", 
+                name=f"📁 {cog_name}", 
                 value=f"**{len(cmds)} commandes**\n`+help {cog_name.lower()}` pour voir les détails",
                 inline=False
             )
         
         embed.add_field(
-            name="� Recherche",
-            value="`+help <nom_commande>` pour voir une commande spécifique",
+            name="🔍 Recherche",
+            value="`+help <catégorie>` pour voir les commandes d'une catégorie",
             inline=False
         )
         
