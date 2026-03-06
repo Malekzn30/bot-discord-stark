@@ -189,10 +189,10 @@ def keep_alive():
 
 # Commande help par défaut
 @bot.command()
-async def help(ctx, category: str = None):
-    """Affiche l'aide du bot avec toutes les commandes"""
+async def help(ctx, category: str = None, page: int = 1):
+    """Affiche l'aide du bot avec interface interactive"""
     if category:
-        # Aide par catégorie
+        # Aide par catégorie avec pagination
         category_commands = []
         for cmd in bot.commands:
             if cmd.cog and cmd.cog.__class__.__name__.lower() == category.lower():
@@ -201,62 +201,161 @@ async def help(ctx, category: str = None):
         if not category_commands:
             return await ctx.send(f"❌ Catégorie `{category}` non trouvée")
         
-        embed = nextcord.Embed(
-            title=f"📖 Aide: {category.title()}",
-            description=f"**{len(category_commands)} commandes**",
-            color=0x3498db
-        )
-        
-        # Limiter à 25 commandes par embed
-        commands_to_show = sorted(category_commands, key=lambda x: x.name)[:25]
-        
-        for cmd in commands_to_show:
-            help_text = cmd.help or "Aucune description"
-            embed.add_field(name=f"+{cmd.name}", value=help_text[:100], inline=False)
-        
-        if len(category_commands) > 25:
-            embed.set_footer(text=f"25/{len(category_commands)} commandes affichées")
-        
-        await ctx.send(embed=embed)
+        await send_category_help(ctx, category, category_commands, page)
     else:
-        # Aide générale avec catégories
-        embed = nextcord.Embed(
-            title="🤖 StarK92 Bot - Aide Complète",
-            description=f"**Total: {len(bot.commands)} commandes**",
-            color=0x3498db
+        # Menu principal interactif
+        await send_main_help(ctx)
+
+async def send_main_help(ctx):
+    """Envoie le menu principal d'aide avec sélecteur"""
+    from collections import Counter
+    
+    # Regrouper par catégories
+    categories = {}
+    for cmd in bot.commands:
+        cog_name = cmd.cog.__class__.__name__ if cmd.cog else "Inconnu"
+        if cog_name not in categories:
+            categories[cog_name] = []
+        categories[cog_name].append(cmd)
+    
+    # Créer le menu déroulant
+    options = []
+    for cog_name, cmds in sorted(categories.items(), key=lambda x: len(x[1]), reverse=True):
+        if cog_name != "Inconnu":  # Exclure les commandes système
+            options.append(nextcord.SelectOption(
+                label=f"{cog_name} ({len(cmds)} commandes)",
+                description=f"Voir les {len(cmds)} commandes de {cog_name}",
+                value=cog_name.lower()
+            ))
+    
+    select = nextcord.ui.Select(
+        placeholder="🔍 Choisis une catégorie...",
+        options=options[:25],  # Limite Discord
+        custom_id="help_category_select"
+    )
+    
+    async def select_callback(interaction: nextcord.Interaction):
+        selected_category = interaction.data['values'][0]
+        await interaction.response.defer()
+        await send_category_help(interaction.user, selected_category, 
+                               [cmd for cmd in bot.commands 
+                                if cmd.cog and cmd.cog.__class__.__name__.lower() == selected_category], 1)
+    
+    select.callback = select_callback
+    
+    view = nextcord.ui.View(timeout=180)  # 3 minutes timeout
+    view.add_item(select)
+    
+    embed = nextcord.Embed(
+        title="🤖 StarK92 Bot - Aide Interactive",
+        description=f"**{len(bot.commands)} commandes disponibles**\n\n👇 **Sélectionne une catégorie ci-dessous**",
+        color=0x3498db
+    )
+    
+    embed.add_field(
+        name="📊 Statistiques",
+        value=f"• **{len(categories)} catégories**\n• **{len(bot.commands)} commandes totales**\n• **Système optimisé**",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🎯 Commandes Populaires",
+        value="`+devinelenombre` • `+helpmenu` • `+voice`\n`+cogstatus` • `+ping` • `+dice`",
+        inline=False
+    )
+    
+    embed.set_footer(text="Sélectionne une catégorie dans le menu déroulant")
+    
+    await ctx.send(embed=embed, view=view)
+
+async def send_category_help(ctx, category_name, commands_list, page=1):
+    """Envoie l'aide d'une catégorie avec boutons de navigation"""
+    # Trier les commandes
+    sorted_commands = sorted(commands_list, key=lambda x: x.name)
+    
+    # Calculer la pagination
+    commands_per_page = 25
+    total_pages = (len(sorted_commands) + commands_per_page - 1) // commands_per_page
+    
+    if page < 1 or page > total_pages:
+        page = 1
+    
+    # Obtenir les commandes pour cette page
+    start_idx = (page - 1) * commands_per_page
+    end_idx = start_idx + commands_per_page
+    page_commands = sorted_commands[start_idx:end_idx]
+    
+    embed = nextcord.Embed(
+        title=f"📖 Aide: {category_name.title()}",
+        description=f"**{len(commands_list)} commandes** - Page {page}/{total_pages}",
+        color=0x3498db
+    )
+    
+    for cmd in page_commands:
+        help_text = cmd.help or "Aucune description"
+        embed.add_field(name=f"+{cmd.name}", value=help_text[:100], inline=False)
+    
+    embed.set_footer(text=f"Page {page}/{total_pages} • Utilise les boutons pour naviguer")
+    
+    # Créer les boutons de navigation
+    view = nextcord.ui.View(timeout=180)
+    
+    # Bouton Retour
+    back_button = nextcord.ui.Button(
+        label="🔙 Retour",
+        style=nextcord.ButtonStyle.secondary,
+        custom_id="help_back"
+    )
+    
+    async def back_callback(interaction: nextcord.Interaction):
+        await interaction.response.defer()
+        await send_main_help(interaction.user)
+    
+    back_button.callback = back_callback
+    view.add_item(back_button)
+    
+    # Boutons de navigation de page
+    if page > 1:
+        prev_button = nextcord.ui.Button(
+            label="⬅️ Précédent",
+            style=nextcord.ButtonStyle.primary,
+            custom_id="help_prev"
         )
         
-        # Regrouper par catégories
-        from collections import Counter
-        categories = {}
-        for cmd in bot.commands:
-            cog_name = cmd.cog.__class__.__name__ if cmd.cog else "Inconnu"
-            if cog_name not in categories:
-                categories[cog_name] = []
-            categories[cog_name].append(cmd)
+        async def prev_callback(interaction: nextcord.Interaction):
+            await interaction.response.defer()
+            await send_category_help(interaction.user, category_name, commands_list, page - 1)
         
-        # Afficher les catégories (limité à 25)
-        sorted_categories = sorted(categories.items(), key=lambda x: len(x[1]), reverse=True)
-        
-        for i, (cog_name, cmds) in enumerate(sorted_categories):
-            if i >= 25:  # Limite de Discord
-                break
-            
-            embed.add_field(
-                name=f"📁 {cog_name}", 
-                value=f"**{len(cmds)} commandes**\n`+help {cog_name.lower()}` pour voir les détails",
-                inline=False
-            )
-        
-        embed.add_field(
-            name="🔍 Recherche",
-            value="`+help <catégorie>` pour voir les commandes d'une catégorie",
-            inline=False
+        prev_button.callback = prev_callback
+        view.add_item(prev_button)
+    
+    # Bouton page actuelle
+    page_button = nextcord.ui.Button(
+        label=f"� {page}/{total_pages}",
+        style=nextcord.ButtonStyle.secondary,
+        disabled=True
+    )
+    view.add_item(page_button)
+    
+    if page < total_pages:
+        next_button = nextcord.ui.Button(
+            label="➡️ Suivant",
+            style=nextcord.ButtonStyle.primary,
+            custom_id="help_next"
         )
         
-        embed.set_footer(text="Utilise +help <catégorie> pour voir les commandes d'une catégorie")
+        async def next_callback(interaction: nextcord.Interaction):
+            await interaction.response.defer()
+            await send_category_help(interaction.user, category_name, commands_list, page + 1)
         
-        await ctx.send(embed=embed)
+        next_button.callback = next_callback
+        view.add_item(next_button)
+    
+    # Envoyer le message
+    if hasattr(ctx, 'send'):  # Si c'est un Context normal
+        await ctx.send(embed=embed, view=view)
+    else:  # Si c'est une Interaction
+        await ctx.send(embed=embed, view=view)
 
 # ============================
 # LANCEMENT
