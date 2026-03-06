@@ -22,6 +22,7 @@ class BotComplete(commands.Cog):
         self.bot = bot
         self.active_timers = {}
         self.active_tickets = {}
+        self.guess_games = {}
         self.ensure_directories()
         
     def ensure_directories(self):
@@ -362,7 +363,7 @@ class BotComplete(commands.Cog):
             await ctx.send(f"❌ Erreur: {e}")
     
     # ============= SYSTÈME DE SUPPORT =============
-    @commands.command(name="ticket")
+    @commands.command(name="createticket")
     async def create_ticket(self, ctx, *, reason: str = "Aucune raison spécifiée"):
         """Créer un ticket de support"""
         try:
@@ -411,9 +412,9 @@ class BotComplete(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Erreur: {e}")
     
-    @commands.command(name="dmall")
+    @commands.command(name="dmall_simple")
     @has_role()
-    async def dmall(self, ctx, message_type: str, *, content: str = None):
+    async def dmall_simple(self, ctx, message_type: str, *, content: str = None):
         """Envoyer un message à tous les membres"""
         if not content:
             return await ctx.send("❌ Utilisation: `+dmall <type> <message>`")
@@ -581,8 +582,8 @@ class BotComplete(commands.Cog):
         await ctx.send(embed=embed)
     
     # ============= SYSTÈME DE FUN SIMPLE =============
-    @commands.command(name="meme")
-    async def meme(self, ctx, category: str = "random"):
+    @commands.command(name="memesimple")
+    async def memesimple(self, ctx, category: str = "random"):
         """Afficher un mème aléatoire"""
         memes = {
             "random": [
@@ -612,8 +613,8 @@ class BotComplete(commands.Cog):
         
         await ctx.send(embed=embed)
     
-    @commands.command(name="joke")
-    async def joke(self, ctx):
+    @commands.command(name="jokesimple")
+    async def jokesimple(self, ctx):
         """Blague aléatoire"""
         jokes = [
             "Pourquoi les développeurs portent-ils des lunettes ?\nParce qu'ils ne voient pas bien le C# ! 👓",
@@ -796,8 +797,8 @@ class BotComplete(commands.Cog):
         await ctx.send(embed=embed)
     
     # ============= SYSTÈME DE JEUX AVANCÉ =============
-    @commands.command(name="rps")
-    async def rps(self, ctx, choice: str = None):
+    @commands.command(name="rpssimple")
+    async def rpssimple(self, ctx, choice: str = None):
         """Pierre feuille ciseaux"""
         choices = ["pierre", "feuille", "ciseaux", "rock", "paper", "scissors"]
         if not choice or choice.lower() not in choices:
@@ -825,17 +826,148 @@ class BotComplete(commands.Cog):
         await ctx.send(embed=embed)
     
     @commands.command(name="devinelenombre")
-    async def devinelenombre(self, ctx):
-        """Deviner le nombre"""
-        number = random.randint(1, 100)
-        embed = nextcord.Embed(
+    async def devinelenombre(self, ctx, min_num: int = 1, max_num: int = 100, channel: nextcord.TextChannel = None):
+        """Jeu de devinette de nombre avec lock du salon"""
+        target_channel = channel or ctx.channel
+        
+        if target_channel.id in self.guess_games:
+            return await ctx.send("❌ Un jeu est déjà en cours dans ce salon!")
+        
+        if min_num >= max_num or max_num - min_num < 10:
+            return await ctx.send("❌ L'intervalle doit être d'au moins 10 nombres!")
+        
+        if max_num > 10000:
+            return await ctx.send("❌ Le nombre maximum ne peut pas dépasser 10000!")
+        
+        # Générer le nombre secret
+        secret_number = random.randint(min_num, max_num)
+        
+        # Stocker le jeu
+        self.guess_games[target_channel.id] = {
+            'number': secret_number,
+            'min': min_num,
+            'max': max_num,
+            'author': ctx.author.id,
+            'start_time': time.time()
+        }
+        
+        # 1. Lock du salon immédiatement (juste une permission)
+        await target_channel.set_permissions(target_channel.guild.default_role, send_messages=False)
+        
+        # Message de début
+        start_embed = nextcord.Embed(
             title="🔢 Devine le Nombre",
-            description="Je pense à un nombre entre 1 et 100. Devine-le!",
-            color=0x3498db,
+            description=f"**Je pense à un nombre entre {min_num} et {max_num}!**\n\nLe salon est verrouillé, préparez-vous...",
+            color=0xe74c3c,
             timestamp=datetime.datetime.now()
         )
-        embed.set_footer(text=f"Demandé par {ctx.author.name}")
-        await ctx.send(embed=embed)
+        start_embed.add_field(name="🎮 Règles", value="• Devinez le nombre\n• Le premier qui trouve gagne\n• Le salon se déverrouillera pour les réponses\n• Bonne chance!", inline=False)
+        start_embed.set_footer(text=f"Jeu créé par {ctx.author.name}")
+        
+        await target_channel.send(embed=start_embed)
+        
+        # 2. Compte à rebours de 5 secondes
+        countdown_msg = await target_channel.send("🔒 **Début du jeu dans...**")
+        
+        for i in range(5, 0, -1):
+            await countdown_msg.edit(content=f"🔒 **Début du jeu dans... {i}**")
+            await asyncio.sleep(1)
+        
+        # 3. Envoyer le DM au rôle autorisé
+        try:
+            authorized_role = ctx.guild.get_role(AUTHORIZED_ROLE_ID)
+            if authorized_role:
+                dm_embed = nextcord.Embed(
+                    title="🤖 Information Admin - Devine le Nombre",
+                    description=f"**Nombre secret:** {secret_number}\n**Salon:** {target_channel.mention}\n**Intervalle:** {min_num}-{max_num}\n**Créateur:** {ctx.author.mention}",
+                    color=0x9B59B6,
+                    timestamp=datetime.datetime.now()
+                )
+                
+                # Envoyer à tous les membres ayant le rôle autorisé
+                for member in authorized_role.members:
+                    if not member.bot:
+                        try:
+                            await member.send(embed=dm_embed)
+                        except:
+                            pass  # Si le DM échoue, on continue
+        except Exception as e:
+            print(f"Erreur envoi DM admin: {e}")
+        
+        # 4. Unlock tout le monde peut spam
+        await target_channel.set_permissions(target_channel.guild.default_role, send_messages=True)
+        
+        unlock_embed = nextcord.Embed(
+            title="🔓 SALON DÉVERROUILLÉ",
+            description=f"**Le salon est déverrouillé!**\n\n🎯 **Devinez le nombre entre {min_num} et {max_num}!**\n\n spammez vos réponses!",
+            color=0x2ecc71,
+            timestamp=datetime.datetime.now()
+        )
+        unlock_embed.set_footer(text="Le salon se reverrouillera quand quelqu'un trouvera")
+        
+        await target_channel.send(embed=unlock_embed)
+        
+        # 5. Attendre les réponses (sans timeout)
+        def check(m):
+            return (m.channel.id == target_channel.id and 
+                    not m.author.bot and 
+                    m.content.isdigit())
+        
+        while target_channel.id in self.guess_games:
+            try:
+                message = await self.bot.wait_for('message', check=check)
+                
+                guess = int(message.content)
+                
+                if guess == secret_number:
+                    # Quelqu'un a trouvé! Re-lock immédiatement
+                    await target_channel.set_permissions(target_channel.guild.default_role, send_messages=False)
+                    
+                    winner_embed = nextcord.Embed(
+                        title="🎉 GAGNÉ!",
+                        description=f"**{message.author.mention} a trouvé le nombre {secret_number}!**\n\nLe salon est verrouillé! L'owner doit le déverrouiller.",
+                        color=0x2ecc71,
+                        timestamp=datetime.datetime.now()
+                    )
+                    winner_embed.set_footer(text=f"Félicitations à {message.author.name}! Salon verrouillé.")
+                    
+                    await target_channel.send(content=f"🎉 **{message.author.mention}**", embed=winner_embed)
+                    
+                    # Supprimer le jeu de la mémoire mais garder le salon lock
+                    del self.guess_games[target_channel.id]
+                    break
+                        
+            except Exception as e:
+                print(f"Erreur dans le jeu devinelenombre: {e}")
+                break
+    
+    @commands.command(name="stopdevine")
+    @commands.has_permissions(manage_channels=True)
+    async def stopdevine(self, ctx):
+        """Arrêter immédiatement un jeu de devinette en cours"""
+        if ctx.channel.id not in self.guess_games:
+            return await ctx.send("❌ Aucun jeu de devinette en cours dans ce salon.")
+        
+        # Récupérer les infos du jeu
+        game = self.guess_games[ctx.channel.id]
+        secret_number = game['number']
+        
+        # Déverrouiller le salon
+        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=True)
+        
+        # Annoncer l'arrêt
+        stop_embed = nextcord.Embed(
+            title="🛑 JEU ARRÊTÉ",
+            description=f"**Le jeu a été arrêté par {ctx.author.mention}!**\n\n**Nombre secret était:** {secret_number}\n**Intervalle:** {game['min']}-{game['max']}",
+            color=0xe74c3c,
+            timestamp=datetime.datetime.now()
+        )
+        stop_embed.set_footer(text="Le salon est maintenant déverrouillé")
+        
+        await ctx.send(embed=stop_embed)
+        
+        # Supprimer le jeu
+        del self.guess_games[ctx.channel.id]
     
     @commands.command(name="slots")
     async def slots(self, ctx):
@@ -862,8 +994,8 @@ class BotComplete(commands.Cog):
         embed.set_footer(text=f"Demandé par {ctx.author.name}")
         await ctx.send(embed=embed)
     
-    @commands.command(name="trivia")
-    async def trivia(self, ctx):
+    @commands.command(name="triviasimple")
+    async def triviasimple(self, ctx):
         """Question de culture générale"""
         questions = [
             {"q": "Quelle est la capitale de la France?", "a": "Paris"},
@@ -1108,8 +1240,8 @@ class BotComplete(commands.Cog):
         embed.set_footer(text=f"Demandé par {ctx.author.name}")
         await ctx.send(embed=embed)
     
-    @commands.command(name="fact")
-    async def fact(self, ctx):
+    @commands.command(name="factsimple")
+    async def factsimple(self, ctx):
         """Fait intéressant aléatoire"""
         facts = [
             "Les abeilles peuvent voler à 32 km/h.",
@@ -1130,8 +1262,8 @@ class BotComplete(commands.Cog):
         embed.set_footer(text=f"Demandé par {ctx.author.name}")
         await ctx.send(embed=embed)
     
-    @commands.command(name="quote")
-    async def quote(self, ctx):
+    @commands.command(name="quotesimple")
+    async def quotesimple(self, ctx):
         """Citation inspirante"""
         quotes = [
             "Le succès est la somme de petits efforts répétés jour après jour. - Robert Collier",
@@ -1169,8 +1301,8 @@ class BotComplete(commands.Cog):
         await ctx.send(embed=embed)
     
     # ============= SYSTÈME DE COMMUNAUTÉ =============
-    @commands.command(name="suggest")
-    async def suggest(self, ctx, *, suggestion: str):
+    @commands.command(name="suggestsimple")
+    async def suggestsimple(self, ctx, *, suggestion: str):
         """Faire une suggestion pour le serveur"""
         embed = nextcord.Embed(
             title="💡 Suggestion",
@@ -1187,7 +1319,7 @@ class BotComplete(commands.Cog):
         
         await ctx.message.delete()
     
-    @commands.command(name="poll")
+    @commands.command(name="polladvanced")
     @commands.has_permissions(manage_messages=True)
     async def poll(self, ctx, *, question: str):
         """Créer un sondage"""
@@ -1289,7 +1421,7 @@ class BotComplete(commands.Cog):
         embed.set_footer(text=f"Demandé par {ctx.author.name}")
         await ctx.send(embed=embed)
     
-    @commands.command(name="userinfo")
+    @commands.command(name="userinfosimple")
     async def userinfo(self, ctx, member: nextcord.Member = None):
         """Informations sur un utilisateur"""
         target = member or ctx.author
@@ -1337,7 +1469,7 @@ class BotComplete(commands.Cog):
             await ctx.send(f"❌ Erreur: {e}")
     
     # ============= SYSTÈME DE CONFIGURATION =============
-    @commands.command(name="config")
+    @commands.command(name="configsimple")
     @commands.has_permissions(administrator=True)
     async def config(self, ctx):
         """Menu de configuration"""
@@ -1397,7 +1529,7 @@ class BotComplete(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Erreur: {e}")
     
-    @commands.command(name="setprefix")
+    @commands.command(name="setprefixsimple")
     @commands.has_permissions(administrator=True)
     async def set_prefix(self, ctx, prefix: str):
         """Changer le préfixe des commandes"""
@@ -1412,7 +1544,7 @@ class BotComplete(commands.Cog):
         )
         await ctx.send(embed=embed)
     
-    @commands.command(name="setwelcome")
+    @commands.command(name="setwelcomesimple")
     @commands.has_permissions(administrator=True)
     async def set_welcome(self, ctx, *, message: str):
         """Définir le message de bienvenue"""
@@ -1448,7 +1580,7 @@ class BotComplete(commands.Cog):
         )
         await ctx.send(embed=embed)
     
-    @commands.command(name="setactivity")
+    @commands.command(name="setactivitysimple")
     @commands.has_permissions(administrator=True)
     async def set_activity(self, ctx, *, activity: str):
         """Définir l'activité du bot"""
@@ -1462,7 +1594,7 @@ class BotComplete(commands.Cog):
         )
         await ctx.send(embed=embed)
     
-    @commands.command(name="setstatus")
+    @commands.command(name="setstatussimple")
     @commands.has_permissions(administrator=True)
     async def set_status(self, ctx, status: str):
         """Définir le statut du bot"""
@@ -1549,7 +1681,7 @@ class BotComplete(commands.Cog):
         embed.set_footer(text=f"Demandé par {ctx.author.name}")
         await ctx.send(embed=embed)
     
-    @commands.command(name="optimize")
+    @commands.command(name="optimizesimple")
     @commands.has_permissions(administrator=True)
     async def optimize(self, ctx):
         """Optimiser le bot"""
@@ -1561,7 +1693,7 @@ class BotComplete(commands.Cog):
         )
         await ctx.send(embed=embed)
     
-    @commands.command(name="cache")
+    @commands.command(name="cachesimple")
     @commands.has_permissions(administrator=True)
     async def cache(self, ctx):
         """Voir le cache du bot"""
@@ -1591,7 +1723,7 @@ class BotComplete(commands.Cog):
         )
         await ctx.send(embed=embed)
     
-    @commands.command(name="snipe")
+    @commands.command(name="snipesimple")
     async def snipe(self, ctx):
         """Voir le dernier message supprimé"""
         embed = nextcord.Embed(
@@ -1602,28 +1734,32 @@ class BotComplete(commands.Cog):
         )
         await ctx.send(embed=embed)
     
-    @commands.command(name="calc")
-    async def calc(self, ctx, *, expression: str):
-        """Calculatrice simple"""
-        try:
-            # Calcul simple sécurisé
-            allowed_chars = set('0123456789+-*/().')
-            if not all(c in allowed_chars for c in expression):
-                return await ctx.send("❌ Expression invalide.")
-            
-            result = eval(expression)
-            
-            embed = nextcord.Embed(
-                title="🧮 Calculatrice",
-                description=f"**Calcul:** {expression}\n**Résultat:** {result}",
-                color=0x3498db,
-                timestamp=datetime.datetime.now()
-            )
-            embed.set_footer(text=f"Demandé par {ctx.author.name}")
-            await ctx.send(embed=embed)
-            
-        except Exception as e:
-            await ctx.send(f"❌ Erreur de calcul: {e}")
+    @commands.command(name="pollsimple")
+    async def pollsimple(self, ctx, question: str, *options: str):
+        """Créer un sondage simple"""
+        if len(options) < 2:
+            return await ctx.send("❌ Il faut au moins 2 options pour le sondage.")
+        
+        if len(options) > 10:
+            return await ctx.send("❌ Maximum 10 options autorisées.")
+        
+        embed = nextcord.Embed(
+            title="📊 Sondage",
+            description=f"**Question:** {question}",
+            color=0x3498db,
+            timestamp=datetime.datetime.now()
+        )
+        
+        for i, option in enumerate(options):
+            embed.add_field(name=f"Option {i+1}", value=option, inline=False)
+        
+        embed.set_footer(text=f"Sondage par {ctx.author.name}")
+        
+        message = await ctx.send(embed=embed)
+        
+        # Ajouter les réactions
+        for i in range(len(options)):
+            await message.add_reaction(f"{i+1}\u20e3")
     
     @commands.command(name="translate")
     async def translate(self, ctx, text: str, target_lang: str = "en"):
@@ -1724,7 +1860,7 @@ class BotComplete(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Erreur: {e}")
     
-    @commands.command(name="editsnipe")
+    @commands.command(name="editsnipesimple")
     async def editsnipe(self, ctx):
         """Voir le dernier message modifié"""
         embed = nextcord.Embed(
@@ -1793,7 +1929,7 @@ class BotComplete(commands.Cog):
         embed.set_footer(text=f"Demandé par {ctx.author.name}")
         await ctx.send(embed=embed)
     
-    @commands.command(name="serverinfo")
+    @commands.command(name="serverinfosimple")
     async def serverinfo(self, ctx):
         """Informations sur le serveur"""
         guild = ctx.guild
@@ -1833,7 +1969,7 @@ class BotComplete(commands.Cog):
         await ctx.send(embed=embed)
     
     # ============= SYSTÈME DE MODÉRATION ÉTENDUE =============
-    @commands.command(name="modlogs")
+    @commands.command(name="modlogssimple")
     @commands.has_permissions(administrator=True)
     async def modlogs(self, ctx):
         """Voir les logs de modération"""
@@ -1952,7 +2088,7 @@ class BotComplete(commands.Cog):
             await ctx.send("❌ Utilise: `+antilink on/off`")
     
     # ============= SYSTÈME DE LOGS =============
-    @commands.command(name="logs")
+    @commands.command(name="logssimple")
     @commands.has_permissions(administrator=True)
     async def logs(self, ctx):
         """Configuration des logs"""
@@ -2110,7 +2246,7 @@ class BotComplete(commands.Cog):
         )
         await ctx.send(embed=embed)
     
-    @commands.command(name="close")
+    @commands.command(name="closesimple")
     async def close_ticket(self, ctx):
         """Fermer un ticket"""
         embed = nextcord.Embed(
@@ -2122,7 +2258,7 @@ class BotComplete(commands.Cog):
         await ctx.send(embed=embed)
     
     # ============= SYSTÈME DE BIENVENUE =============
-    @commands.command(name="welcome")
+    @commands.command(name="welcomesimple")
     @commands.has_permissions(administrator=True)
     async def welcome(self, ctx, *, message: str = None):
         """Configurer le message de bienvenue"""
@@ -2161,7 +2297,7 @@ class BotComplete(commands.Cog):
         )
         await ctx.send(embed=embed)
     
-    @commands.command(name="goodbye")
+    @commands.command(name="goodbyesimple")
     @commands.has_permissions(administrator=True)
     async def goodbye(self, ctx, *, message: str = None):
         """Configurer le message d'au revoir"""

@@ -400,7 +400,7 @@ class SystemInteractive(commands.Cog):
             
             await interaction.response.edit_message(embed=embed, view=self)
 
-    @commands.command(name="help")
+    @commands.command(name="helpmenu")
     async def help_interactive(self, ctx):
         """Système d'aide interactif avec menu déroulant et pagination"""
         

@@ -8,6 +8,7 @@ import requests
 import asyncio
 from dotenv import load_dotenv
 import gc
+from cog_manager import setup_cog_manager
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -63,25 +64,97 @@ async def cleanup_aggressive():
         print(f"[GC] Erreur: {e}")
 
 # ============================
-# CHARGEMENT DES COGS
+# CHARGEMENT DES COGS (OPTIMISÉ)
 # ============================
 
-COGS = ["bot_complete", "voice", "system_interactive"]
+# Initialiser le gestionnaire de cogs
+cog_manager = None
 
 async def load_cogs_async():
-    for cog in COGS:
-        try:
-            bot.load_extension(f"cogs.{cog}")
-            print(f"[+] Cog chargé : {cog}")
-            await asyncio.sleep(0.1)
-        except Exception as e:
-            print(f"[!] Erreur chargement {cog}: {e}")
+    global cog_manager
+    
+    # Initialiser le gestionnaire de cogs
+    cog_manager = setup_cog_manager(bot)
+    
+    # Charger uniquement les cogs essentiels au démarrage
+    await cog_manager.load_essential_cogs()
+    
+    # Lancer le chargement des cogs optionnels en arrière-plan
+    asyncio.create_task(load_optional_cogs_delayed())
+
+async def load_optional_cogs_delayed():
+    """Charger les cogs optionnels après 30 secondes"""
+    await asyncio.sleep(30)  # Attendre que le bot soit stable
+    await cog_manager.load_optional_cogs()
 
 def load_cogs():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(load_cogs_async())
     loop.close()
+
+# Commandes de gestion des cogs
+@bot.command()
+@commands.is_owner()
+async def cogstatus(ctx):
+    """Voir le statut des cogs"""
+    if not cog_manager:
+        return await ctx.send("❌ Gestionnaire de cogs non initialisé")
+    
+    status = cog_manager.get_cog_status()
+    
+    embed = nextcord.Embed(
+        title="⚙️ Statut des Cogs",
+        description=f"**Cogs chargés:** {status['total_loaded']}/{status['total_available']}",
+        color=0x3498db
+    )
+    
+    embed.add_field(name="🟢 Chargés", value=", ".join(status['loaded'])[:500], inline=False)
+    embed.add_field(name="🔴 Désactivés", value=", ".join(status['disabled']) or "Aucun", inline=False)
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+@commands.is_owner()
+async def loadcog(ctx, cog_name: str):
+    """Charger un cog spécifique"""
+    if not cog_manager:
+        return await ctx.send("❌ Gestionnaire de cogs non initialisé")
+    
+    success = await cog_manager.load_cog_on_demand(cog_name)
+    
+    if success:
+        await ctx.send(f"✅ Cog `{cog_name}` chargé avec succès")
+    else:
+        await ctx.send(f"❌ Impossible de charger le cog `{cog_name}`")
+
+@bot.command()
+@commands.is_owner()
+async def unloadcog(ctx, cog_name: str):
+    """Décharger un cog spécifique"""
+    if not cog_manager:
+        return await ctx.send("❌ Gestionnaire de cogs non initialisé")
+    
+    success = await cog_manager.unload_cog(cog_name)
+    
+    if success:
+        await ctx.send(f"✅ Cog `{cog_name}` déchargé avec succès")
+    else:
+        await ctx.send(f"❌ Impossible de décharger le cog `{cog_name}`")
+
+@bot.command()
+@commands.is_owner()
+async def reloadcog(ctx, cog_name: str):
+    """Recharger un cog spécifique"""
+    if not cog_manager:
+        return await ctx.send("❌ Gestionnaire de cogs non initialisé")
+    
+    success = await cog_manager.reload_cog(cog_name)
+    
+    if success:
+        await ctx.send(f"✅ Cog `{cog_name}` rechargé avec succès")
+    else:
+        await ctx.send(f"❌ Impossible de recharger le cog `{cog_name}`")
 
 # ============================
 # FLASK SERVER (RENDER)
