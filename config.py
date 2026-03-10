@@ -10,6 +10,25 @@ load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 AUTHORIZED_ROLE_ID = 1469665367881420841  # Rôle autorisé pour les commandes
 
+# ============= SALONS IGNORÉS =============
+# Le bot ignorera ces salons (IDs ou noms)
+IGNORED_CHANNELS = [
+    # Exemples (décommente et modifie selon tes besoins):
+    # 123456789012345678,  # ID d'un salon spécifique
+    # "salon-spam",           # Nom d'un salon
+    # "logs-bots",           # Nom d'un salon
+]
+
+# ============= SALONS AUTORISÉS (optionnel) =============
+# Si défini, le bot ne répondra QUE dans ces salons
+# Si vide, le bot répondra partout sauf dans IGNORED_CHANNELS
+ALLOWED_CHANNELS = [
+    # Exemples (décommente et modifie selon tes besoins):
+    # 123456789012345678,  # ID d'un salon spécifique
+    # "général",             # Nom d'un salon
+    # "commandes-bot",        # Nom d'un salon
+]
+
 # ============= CONFIGURATION BOT =============
 BOT_PREFIX = "+"
 BOT_DESCRIPTION = "🤖 StarK92 Bot - Système complet pour votre serveur Discord"

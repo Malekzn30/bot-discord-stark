@@ -9,10 +9,41 @@ import asyncio
 from dotenv import load_dotenv
 import gc
 from cog_manager import setup_cog_manager
+import config
 
 # Charger les variables d'environnement
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
+
+# ============================
+# FONCTIONS DE VÉRIFICATION DES SALONS
+# ============================
+
+def is_channel_allowed(channel):
+    """Vérifie si le bot peut répondre dans ce salon"""
+    if not channel:
+        return False
+    
+    channel_id = channel.id
+    channel_name = channel.name.lower()
+    
+    # Vérifier les salons ignorés (par ID ou par nom)
+    for ignored in config.IGNORED_CHANNELS:
+        if isinstance(ignored, int) and ignored == channel_id:
+            return False
+        elif isinstance(ignored, str) and ignored.lower() == channel_name:
+            return False
+    
+    # Si ALLOWED_CHANNELS est défini, vérifier que le salon est autorisé
+    if config.ALLOWED_CHANNELS:
+        for allowed in config.ALLOWED_CHANNELS:
+            if isinstance(allowed, int) and allowed == channel_id:
+                return True
+            elif isinstance(allowed, str) and allowed.lower() == channel_name:
+                return True
+        return False  # Salon pas dans la liste autorisée
+    
+    return True  # Salon autorisé par défaut
 
 # ============================
 # DISCORD BOT - OPTIMISÉ RENDER
@@ -45,8 +76,27 @@ async def on_ready():
     cleanup_aggressive.start()
 
 @bot.event
+async def on_message(message):
+    """Vérifie si le bot peut répondre dans ce salon"""
+    # Ignorer les messages du bot lui-même
+    if message.author == bot.user:
+        return
+    
+    # Vérifier si le salon est autorisé
+    if not is_channel_allowed(message.channel):
+        return
+    
+    # Laisser le bot traiter les commandes normalement
+    await bot.process_commands(message)
+
+@bot.event
 async def on_command_error(ctx, error):
     print(f"[ERREUR COMMANDE] {error}")
+    
+    # Vérifier si le salon est autorisé avant d'envoyer un message d'erreur
+    if not is_channel_allowed(ctx.channel):
+        return
+    
     await ctx.send(f"❌ Erreur : {error}")
 
 # ============================
@@ -162,6 +212,110 @@ async def reloadcog(ctx, cog_name: str):
     else:
         await ctx.send(f"❌ Impossible de recharger le cog `{cog_name}`")
 
+@bot.command()
+@commands.is_owner()
+async def ignoredchannels(ctx):
+    """Gérer les salons ignorés par le bot"""
+    embed = nextcord.Embed(
+        title="🔇 Salons Ignorés",
+        description="Configuration des salons où le bot ne répondra pas",
+        color=0x3498db
+    )
+    
+    # Afficher les salons ignorés
+    if config.IGNORED_CHANNELS:
+        ignored_text = []
+        for ignored in config.IGNORED_CHANNELS:
+            if isinstance(ignored, int):
+                ignored_text.append(f"ID: `{ignored}`")
+            else:
+                ignored_text.append(f"Nom: `{ignored}`")
+        embed.add_field(name="🚫 Salons Ignorés", value="\n".join(ignored_text), inline=False)
+    else:
+        embed.add_field(name="🚫 Salons Ignorés", value="Aucun salon ignoré", inline=False)
+    
+    # Afficher les salons autorisés (si configuré)
+    if config.ALLOWED_CHANNELS:
+        allowed_text = []
+        for allowed in config.ALLOWED_CHANNELS:
+            if isinstance(allowed, int):
+                allowed_text.append(f"ID: `{allowed}`")
+            else:
+                allowed_text.append(f"Nom: `{allowed}`")
+        embed.add_field(name="✅ Salons Autorisés Uniquement", value="\n".join(allowed_text), inline=False)
+    else:
+        embed.add_field(name="✅ Mode", value="Tous les salons autorisés sauf ignorés", inline=False)
+    
+    embed.add_field(
+        name="📝 Comment Modifier",
+        value="Édite `config.py` et modifie les listes:\n- `IGNORED_CHANNELS` - Salons à ignorer\n- `ALLOWED_CHANNELS` - Salons autorisés uniquement",
+        inline=False
+    )
+    
+    embed.set_footer(text="Le bot doit être redémarré pour appliquer les changements")
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+@commands.is_owner()
+async def reloadconfig(ctx):
+    """Recharge la configuration du bot"""
+    try:
+        import importlib
+        importlib.reload(config)
+        
+        await ctx.send("✅ Configuration rechargée avec succès!")
+        
+        # Afficher les nouvelles configurations
+        embed = nextcord.Embed(
+            title="⚙️ Configuration Rechargée",
+            color=0x2ecc71
+        )
+        
+        embed.add_field(name="🚫 Salons Ignorés", value=f"{len(config.IGNORED_CHANNELS)} salons", inline=True)
+        embed.add_field(name="✅ Salons Autorisés", value=f"{len(config.ALLOWED_CHANNELS)} salons", inline=True)
+        embed.add_field(name="🎯 Mode", value="Restreint" if config.ALLOWED_CHANNELS else "Ouvert", inline=True)
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        await ctx.send(f"❌ Erreur lors du rechargement: {e}")
+
+@bot.command()
+@commands.is_owner()
+async def testchannel(ctx):
+    """Teste si le bot peut répondre dans le salon actuel"""
+    if is_channel_allowed(ctx.channel):
+        await ctx.send("✅ Ce salon est **autorisé** - Le bot peut répondre ici")
+    else:
+        await ctx.send("❌ Ce salon est **ignoré** - Le bot ne répondra pas ici")
+        
+        # Donner des informations sur pourquoi
+        channel_id = ctx.channel.id
+        channel_name = ctx.channel.name.lower()
+        
+        reasons = []
+        for ignored in config.IGNORED_CHANNELS:
+            if isinstance(ignored, int) and ignored == channel_id:
+                reasons.append(f"ID `{ignored}` est dans la liste ignorée")
+            elif isinstance(ignored, str) and ignored.lower() == channel_name:
+                reasons.append(f"Nom `{ignored}` est dans la liste ignorée")
+        
+        if config.ALLOWED_CHANNELS:
+            is_allowed = False
+            for allowed in config.ALLOWED_CHANNELS:
+                if isinstance(allowed, int) and allowed == channel_id:
+                    is_allowed = True
+                    break
+                elif isinstance(allowed, str) and allowed.lower() == channel_name:
+                    is_allowed = True
+                    break
+            if not is_allowed:
+                reasons.append("Le salon n'est pas dans la liste autorisée")
+        
+        if reasons:
+            await ctx.send(f"📝 **Raison(s):**\n" + "\n".join(reasons))
+
 # ============================
 # FLASK SERVER (RENDER)
 # ============================
@@ -191,6 +345,10 @@ def keep_alive():
 @bot.command()
 async def help(ctx, category: str = None, page: int = 1):
     """Affiche l'aide du bot avec interface interactive"""
+    # Vérifier si le salon est autorisé
+    if not is_channel_allowed(ctx.channel):
+        return
+    
     if category:
         # Aide par catégorie avec pagination
         category_commands = []
