@@ -13,6 +13,7 @@ AUTHORIZED_ROLE_ID = 1469665367881420841  # Rôle autorisé pour les commandes
 # ============= SALONS IGNORÉS =============
 # Le bot ignorera ces salons (IDs ou noms)
 IGNORED_CHANNELS = [
+    1469694646069235743,  # Salon à ignorer
     # Exemples (décommente et modifie selon tes besoins):
     # 123456789012345678,  # ID d'un salon spécifique
     # "salon-spam",           # Nom d'un salon

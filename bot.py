@@ -97,7 +97,19 @@ async def on_command_error(ctx, error):
     if not is_channel_allowed(ctx.channel):
         return
     
-    await ctx.send(f"❌ Erreur : {error}")
+    # Gérer les erreurs spécifiques
+    if isinstance(error, commands.CommandNotFound):
+        # Ne rien afficher pour les commandes non trouvées dans les salons ignorés
+        return
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Tu n'as pas la permission d'utiliser cette commande!")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"❌ Argument manquant: `{error.param}`")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send(f"❌ Argument invalide: {error}")
+    else:
+        # Pour les autres erreurs, afficher un message générique
+        await ctx.send(f"❌ Une erreur est survenue: {str(error)[:100]}")
 
 # ============================
 # CLEANUP MEMOIRE
