@@ -30,6 +30,15 @@ ALLOWED_CHANNELS = [
     # "commandes-bot",        # Nom d'un salon
 ]
 
+# ============= CONFIGURATION RÉACTIONS AUTOMATIQUES =============
+# Le bot réagira automatiquement à tous les messages dans ces salons
+AUTO_REACT_CHANNELS = {
+    # Format: "channel_id": ["emoji1", "emoji2", ...]
+    # Exemples:
+    # "123456789012345678": ["😂", "❤️", "👍"],
+    # "987654321098765432": ["🔥", "💯"],
+}
+
 # ============= CONFIGURATION BOT =============
 BOT_PREFIX = "+"
 BOT_DESCRIPTION = "🤖 StarK92 Bot - Système complet pour votre serveur Discord"

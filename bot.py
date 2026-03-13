@@ -77,7 +77,7 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    """Vérifie si le bot peut répondre dans ce salon"""
+    """Vérifie si le bot peut répondre dans ce salon et gère les réactions automatiques"""
     # Ignorer les messages du bot lui-même
     if message.author == bot.user:
         return
@@ -86,8 +86,24 @@ async def on_message(message):
     if not is_channel_allowed(message.channel):
         return
     
+    # Gérer les réactions automatiques
+    await handle_auto_reactions(message)
+    
     # Laisser le bot traiter les commandes normalement
     await bot.process_commands(message)
+
+async def handle_auto_reactions(message):
+    """Gère les réactions automatiques dans les salons configurés"""
+    channel_id_str = str(message.channel.id)
+    
+    if channel_id_str in config.AUTO_REACT_CHANNELS:
+        emojis = config.AUTO_REACT_CHANNELS[channel_id_str]
+        
+        for emoji in emojis:
+            try:
+                await message.add_reaction(emoji)
+            except Exception as e:
+                print(f"[AUTO_REACT] Erreur ajout réaction {emoji}: {e}")
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -263,10 +279,6 @@ async def ignoredchannels(ctx):
         value="Édite `config.py` et modifie les listes:\n- `IGNORED_CHANNELS` - Salons à ignorer\n- `ALLOWED_CHANNELS` - Salons autorisés uniquement",
         inline=False
     )
-    
-    embed.set_footer(text="Le bot doit être redémarré pour appliquer les changements")
-    
-    await ctx.send(embed=embed)
 
 @bot.command()
 @commands.is_owner()
@@ -286,6 +298,7 @@ async def reloadconfig(ctx):
         
         embed.add_field(name="🚫 Salons Ignorés", value=f"{len(config.IGNORED_CHANNELS)} salons", inline=True)
         embed.add_field(name="✅ Salons Autorisés", value=f"{len(config.ALLOWED_CHANNELS)} salons", inline=True)
+        embed.add_field(name="🔄 Auto-Réactions", value=f"{len(config.AUTO_REACT_CHANNELS)} salons", inline=True)
         embed.add_field(name="🎯 Mode", value="Restreint" if config.ALLOWED_CHANNELS else "Ouvert", inline=True)
         
         await ctx.send(embed=embed)
@@ -388,7 +401,7 @@ async def send_main_help(ctx):
             categories[cog_name] = []
         categories[cog_name].append(cmd)
     
-    # Créer le menu déroulant
+    # Créer le menu déroulant avec plus de catégories
     options = []
     for cog_name, cmds in sorted(categories.items(), key=lambda x: len(x[1]), reverse=True):
         if cog_name != "Inconnu":  # Exclure les commandes système
@@ -407,13 +420,13 @@ async def send_main_help(ctx):
     async def select_callback(interaction: nextcord.Interaction):
         selected_category = interaction.data['values'][0]
         await interaction.response.defer()
-        await send_category_help(interaction.user, selected_category, 
+        await send_category_help(interaction, selected_category, 
                                [cmd for cmd in bot.commands 
                                 if cmd.cog and cmd.cog.__class__.__name__.lower() == selected_category], 1)
     
     select.callback = select_callback
     
-    view = nextcord.ui.View(timeout=180)  # 3 minutes timeout
+    view = nextcord.ui.View(timeout=180)
     view.add_item(select)
     
     embed = nextcord.Embed(
@@ -431,6 +444,12 @@ async def send_main_help(ctx):
     embed.add_field(
         name="🎯 Commandes Populaires",
         value="`+devinelenombre` • `+helpmenu` • `+voice`\n`+cogstatus` • `+ping` • `+dice`",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="⚙️ Gestion",
+        value="`+setactivity` • `+setstatus` • `+autoreact`\n`+ignoredchannels` • `+testchannel`",
         inline=False
     )
     
@@ -479,7 +498,7 @@ async def send_category_help(ctx, category_name, commands_list, page=1):
     
     async def back_callback(interaction: nextcord.Interaction):
         await interaction.response.defer()
-        await send_main_help(interaction.user)
+        await send_main_help(interaction)
     
     back_button.callback = back_callback
     view.add_item(back_button)
@@ -494,14 +513,14 @@ async def send_category_help(ctx, category_name, commands_list, page=1):
         
         async def prev_callback(interaction: nextcord.Interaction):
             await interaction.response.defer()
-            await send_category_help(interaction.user, category_name, commands_list, page - 1)
+            await send_category_help(interaction, category_name, commands_list, page - 1)
         
         prev_button.callback = prev_callback
         view.add_item(prev_button)
     
     # Bouton page actuelle
     page_button = nextcord.ui.Button(
-        label=f"� {page}/{total_pages}",
+        label=f"📄 {page}/{total_pages}",
         style=nextcord.ButtonStyle.secondary,
         disabled=True
     )
@@ -516,16 +535,18 @@ async def send_category_help(ctx, category_name, commands_list, page=1):
         
         async def next_callback(interaction: nextcord.Interaction):
             await interaction.response.defer()
-            await send_category_help(interaction.user, category_name, commands_list, page + 1)
+            await send_category_help(interaction, category_name, commands_list, page + 1)
         
         next_button.callback = next_callback
         view.add_item(next_button)
     
-    # Envoyer le message
-    if hasattr(ctx, 'send'):  # Si c'est un Context normal
+    # Envoyer ou modifier le message
+    if hasattr(ctx, 'edit'):  # Si c'est une interaction (modification)
+        await ctx.edit(embed=embed, view=view)
+    else:  # Si c'est un Context normal (nouveau message)
         await ctx.send(embed=embed, view=view)
-    else:  # Si c'est une Interaction
-        await ctx.send(embed=embed, view=view)
+
+# ... (code après la section modifiée)
 
 # ============================
 # LANCEMENT
