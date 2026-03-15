@@ -16,7 +16,7 @@ class CogManager:
         
         if not os.path.exists(config_file):
             default_config = {
-                "essential": ["voice", "system_interactive", "bot_complete"],
+                "essential": ["voice", "system_interactive", "bot_complete", "permission_manager"],
                 "optional": [
                     "moderation_enhanced",
                     "utility_commands", 

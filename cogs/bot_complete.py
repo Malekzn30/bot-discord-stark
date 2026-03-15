@@ -448,7 +448,7 @@ class BotComplete(commands.Cog):
     # ============= SYSTÈME DE MODÉRATION SIMPLE =============
     @commands.command(name="warn")
     @commands.has_permissions(kick_members=True)
-    async def warn(self, ctx, member: nextcord.Member, *, reason: str):
+    async def warn(self, ctx, member: nextcord.Member, *, reason: str = "Aucune raison spécifiée"):
         """Avertir un membre"""
         try:
             if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
@@ -2338,26 +2338,67 @@ class BotComplete(commands.Cog):
     
     # ============= SYSTÈME DE ROLES =============
     @commands.command(name="roles")
-    async def roles(self, ctx):
-        """Voir tous les rôles du serveur"""
-        guild = ctx.guild
+    @commands.has_permissions(manage_roles=True)
+    async def roles(self, ctx, action: str = None, member: nextcord.Member = None, role: nextcord.Role = None):
+        """Gérer les rôles ou voir tous les rôles du serveur"""
+        if action is None:
+            # Afficher tous les rôles du serveur
+            guild = ctx.guild
+            
+            embed = nextcord.Embed(
+                title="🎭 Rôles du Serveur",
+                description=f"**{guild.name}** a {len(guild.roles)} rôles",
+                color=0x3498db,
+                timestamp=datetime.datetime.now()
+            )
+            
+            # Afficher les 10 premiers rôles
+            role_list = []
+            for role in guild.roles[:10]:
+                role_list.append(f"{role.mention} ({len(role.members)} membres)")
+            
+            embed.add_field(name="📋 Liste des Rôles", value="\n".join(role_list), inline=False)
+            
+            embed.set_footer(text=f"Demandé par {ctx.author.name}")
+            await ctx.send(embed=embed)
+            return
         
-        embed = nextcord.Embed(
-            title="🎭 Rôles du Serveur",
-            description=f"**{guild.name}** a {len(guild.roles)} rôles",
-            color=0x3498db,
-            timestamp=datetime.datetime.now()
-        )
+        # Gestion des rôles
+        if action.lower() not in ["add", "remove"]:
+            return await ctx.send("❌ Action invalide. Utilise: `add` ou `remove`")
         
-        # Afficher les 10 premiers rôles
-        role_list = []
-        for role in guild.roles[:10]:
-            role_list.append(f"{role.mention} ({len(role.members)} membres)")
+        if member is None or role is None:
+            return await ctx.send("❌ Utilisation: `+roles add/remove @membre @rôle`")
         
-        embed.add_field(name="📋 Liste des Rôles", value="\n".join(role_list), inline=False)
-        
-        embed.set_footer(text=f"Demandé par {ctx.author.name}")
-        await ctx.send(embed=embed)
+        try:
+            if action.lower() == "add":
+                if role in member.roles:
+                    return await ctx.send(f"❌ {member.mention} a déjà le rôle {role.mention}")
+                
+                await member.add_roles(role)
+                embed = nextcord.Embed(
+                    title="✅ Rôle Ajouté",
+                    description=f"**Rôle:** {role.mention}\n**Membre:** {member.mention}\n**Modérateur:** {ctx.author.mention}",
+                    color=0x2ecc71,
+                    timestamp=datetime.datetime.now()
+                )
+                await ctx.send(embed=embed)
+                
+            elif action.lower() == "remove":
+                if role not in member.roles:
+                    return await ctx.send(f"❌ {member.mention} n'a pas le rôle {role.mention}")
+                
+                await member.remove_roles(role)
+                embed = nextcord.Embed(
+                    title="✅ Rôle Retiré",
+                    description=f"**Rôle:** {role.mention}\n**Membre:** {member.mention}\n**Modérateur:** {ctx.author.mention}",
+                    color=0xe74c3c,
+                    timestamp=datetime.datetime.now()
+                )
+                await ctx.send(embed=embed)
+                
+        except Exception as e:
+            await ctx.send(f"❌ Erreur: {e}")
     
     @commands.command(name="checkperms")
     @commands.has_permissions(administrator=True)

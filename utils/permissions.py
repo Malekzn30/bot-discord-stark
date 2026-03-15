@@ -1,11 +1,14 @@
 """
 Système de permissions avancé pour le bot
-Gère les rôles autorisés de manière dynamique
+Gère les rôles autorisés de manière dynamique avec permissions par commande
 """
 
 import json
 import os
 from functools import wraps
+
+# Importer le nouveau système de permissions par commande
+from .command_permissions import is_command_authorized_cached, ALWAYS_AUTHORIZED_ROLE
 
 # Cache pour les permissions
 _permissions_cache = {}
@@ -27,7 +30,7 @@ def load_authorized_roles():
         return [str(AUTHORIZED_ROLE_ID)]
 
 def is_authorized_cached(member):
-    """Vérifier si un membre est autorisé avec cache"""
+    """Vérifier si un membre est autorisé avec cache (ancien système pour compatibilité)"""
     global _permissions_cache, _cache_timestamp
     
     import time
@@ -50,9 +53,14 @@ def is_authorized_cached(member):
     return authorized
 
 def is_authorized(member):
-    """Vérifier si un membre est autorisé à utiliser les commandes"""
+    """Vérifier si un membre est autorisé à utiliser les commandes (ancien système)"""
     if not member.guild:
         return False
+    
+    # Vérifier si le membre a le rôle toujours autorisé
+    always_authorized_role = member.guild.get_role(ALWAYS_AUTHORIZED_ROLE)
+    if always_authorized_role and always_authorized_role in member.roles:
+        return True
     
     # Charger les rôles autorisés
     authorized_roles = load_authorized_roles()
@@ -66,11 +74,22 @@ def is_authorized(member):
     return False
 
 def has_role():
-    """Décorateur pour vérifier si un membre a un rôle autorisé"""
+    """Décorateur pour vérifier si un membre a un rôle autorisé (ancien système)"""
     def decorator(func):
         @wraps(func)
         async def wrapper(self, ctx, *args, **kwargs):
-            # Vérifier les permissions
+            # Vérifier les permissions avec le nouveau système si possible
+            command_name = func.__name__
+            
+            # Essayer le nouveau système de permissions par commande
+            try:
+                from .command_permissions import is_command_authorized_cached
+                if is_command_authorized_cached(ctx.author, command_name):
+                    return await func(self, ctx, *args, **kwargs)
+            except:
+                pass  # Fallback sur l'ancien système
+            
+            # Ancien système en fallback
             if not is_authorized_cached(ctx.author):
                 embed = nextcord.Embed(
                     title="❌ Accès refusé",
@@ -105,6 +124,65 @@ def has_role():
         return wrapper
     return decorator
 
+def has_command_permission(command_name: str):
+    """Décorateur pour vérifier les permissions par commande (nouveau système)"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(self, ctx, *args, **kwargs):
+            # Vérifier les permissions avec le nouveau système
+            try:
+                from .command_permissions import is_command_authorized_cached
+                if is_command_authorized_cached(ctx.author, command_name):
+                    return await func(self, ctx, *args, **kwargs)
+            except:
+                pass
+            
+            # Message d'erreur
+            embed = nextcord.Embed(
+                title="❌ Accès refusé",
+                description=f"Vous n'avez pas la permission d'utiliser la commande `+{command_name}`.",
+                color=0xE74C3C
+            )
+            
+            # Afficher les rôles requis
+            try:
+                from .command_permissions import get_authorized_roles_for_command
+                authorized_roles = get_authorized_roles_for_command(command_name)
+                role_mentions = []
+                for role_id in authorized_roles:
+                    role = ctx.guild.get_role(int(role_id))
+                    if role:
+                        role_mentions.append(role.mention)
+                    else:
+                        role_mentions.append(f"`ID: {role_id}`")
+                
+                if role_mentions:
+                    embed.add_field(
+                        name="🔒 Rôles requis",
+                        value=", ".join(role_mentions),
+                        inline=False
+                    )
+            except:
+                pass
+            
+            embed.add_field(
+                name="💡 Que faire ?",
+                value="Contactez un administrateur pour obtenir les permissions nécessaires.",
+                inline=False
+            )
+            
+            embed.set_footer(text=f"Utilise +permissions check @{ctx.author.name} pour vérifier vos permissions")
+            
+            try:
+                await ctx.send(embed=embed, delete_after=15)
+            except:
+                pass
+            
+            return
+        
+        return wrapper
+    return decorator
+
 def has_any_role(*role_ids):
     """Décorateur pour vérifier si un membre a un des rôles spécifiés"""
     def decorator(func):
@@ -112,6 +190,11 @@ def has_any_role(*role_ids):
         async def wrapper(self, ctx, *args, **kwargs):
             if not ctx.guild:
                 return
+            
+            # Vérifier si le membre a le rôle toujours autorisé
+            always_authorized_role = ctx.guild.get_role(ALWAYS_AUTHORIZED_ROLE)
+            if always_authorized_role and always_authorized_role in ctx.author.roles:
+                return await func(self, ctx, *args, **kwargs)
             
             # Vérifier si le membre a un des rôles
             for role_id in role_ids:
@@ -126,7 +209,14 @@ def has_any_role(*role_ids):
                 color=0xE74C3C
             )
             
-            embed.set_footer(text="Permissions requises : " + ", ".join([f"<@&{rid}>" for rid in role_ids]))
+            role_mentions = []
+            for role_id in role_ids:
+                role = ctx.guild.get_role(role_id)
+                if role:
+                    role_mentions.append(role.mention)
+            
+            if role_mentions:
+                embed.set_footer(text="Permissions requises : " + ", ".join(role_mentions))
             
             try:
                 await ctx.send(embed=embed, delete_after=10)
@@ -151,3 +241,10 @@ def clear_permissions_cache():
     global _permissions_cache, _cache_timestamp
     _permissions_cache.clear()
     _cache_timestamp = None
+    
+    # Vider aussi le cache du nouveau système
+    try:
+        from .command_permissions import clear_permissions_cache as clear_command_cache
+        clear_command_cache()
+    except:
+        pass

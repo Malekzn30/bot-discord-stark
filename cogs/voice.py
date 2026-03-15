@@ -1306,8 +1306,18 @@ class Voice(commands.Cog):
             return await ctx.send(embed=embed_msg("❌ Erreur", "Tu dois être dans un salon vocal."))
 
         channel = ctx.author.voice.channel
-        await channel.connect()
-        await ctx.send(embed=embed_msg("✅ Vocal", f"J'ai rejoint **{channel.name}**."))
+        
+        # Si le bot est déjà dans un vocal, le déconnecter d'abord
+        if ctx.voice_client:
+            await ctx.voice_client.disconnect()
+        
+        # Se connecter avec self_deaf=False pour rester actif indéfiniment
+        voice_client = await channel.connect(self_deaf=False)
+        
+        # S'assurer que le bot ne se déconnecte pas automatiquement
+        voice_client.stop()  # Arrêter toute lecture en cours
+        
+        await ctx.send(embed=embed_msg("✅ Vocal", f"J'ai rejoint **{channel.name}** et j'y resterai indéfiniment."))
 
     # ============================================================
     # JOIN → Le bot rejoint un salon via son ID
@@ -1323,8 +1333,17 @@ class Voice(commands.Cog):
         if channel is None or not isinstance(channel, nextcord.VoiceChannel):
             return await ctx.send(embed=embed_msg("❌ Erreur", "Salon vocal introuvable."))
 
-        await channel.connect()
-        await ctx.send(embed=embed_msg("✅ Vocal", f"J'ai rejoint **{channel.name}**."))
+        # Si le bot est déjà dans un vocal, le déconnecter d'abord
+        if ctx.voice_client:
+            await ctx.voice_client.disconnect()
+        
+        # Se connecter avec self_deaf=False pour rester actif indéfiniment
+        voice_client = await channel.connect(self_deaf=False)
+        
+        # S'assurer que le bot ne se déconnecte pas automatiquement
+        voice_client.stop()  # Arrêter toute lecture en cours
+        
+        await ctx.send(embed=embed_msg("✅ Vocal", f"J'ai rejoint **{channel.name}** et j'y resterai indéfiniment."))
 
     # ============================================================
     # LEAVE → Le bot quitte le salon vocal

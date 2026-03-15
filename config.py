@@ -55,6 +55,7 @@ COGS_DIR = os.path.join(BASE_DIR, "cogs")
 
 # ============= COGS À CHARGER =============
 cogs = [
+    "cogs.permission_manager",  # Système de permissions par commande
     "cogs.moderation_enhanced",
     "cogs.community_features", 
     "cogs.utility_commands",
