@@ -363,8 +363,11 @@ async def testchannel(ctx):
             await ctx.send(f"📝 **Raison(s):**\n" + "\n".join(reasons))
 
 # ============================
-# FLASK SERVER (RENDER)
+# FLASK SERVER (RENDER) - PRODUCTION READY
 # ============================
+
+from flask import Flask
+from gunicorn.app.wsgiapp import WSGIApplication
 
 app = Flask(__name__)
 
@@ -372,8 +375,28 @@ app = Flask(__name__)
 def home():
     return "Bot Discord en ligne."
 
+class StandaloneApplication(WSGIApplication):
+    def __init__(self, app_uri=None, **kwargs):
+        self.app_uri = app_uri or "app:app"
+        super().__init__(**kwargs)
+    
+    def load_wsgiapp(self):
+        return app
+
 def run_flask():
-    app.run(host="0.0.0.0", port=10000)
+    # Configuration pour Render
+    options = {
+        'bind': '0.0.0.0:10000',
+        'workers': 1,
+        'threads': 2,
+        'timeout': 120,
+        'keepalive': 5,
+        'max_requests': 1000,
+        'max_requests_jitter': 100,
+        'preload_app': True,
+    }
+    
+    StandaloneApplication(options=options).run()
 
 # ============================
 # KEEP-ALIVE (ANTI-SLEEP)
