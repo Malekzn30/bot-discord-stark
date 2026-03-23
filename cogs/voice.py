@@ -851,80 +851,328 @@ class Voice(commands.Cog):
             pass
 
     # ============================================================
-    # MUTEALL (mute tout le vocal)
+    # MUTE UNIFIÉ (mute user, all, ou server)
     # ============================================================
-    @commands.command(name="muteall")
+    @commands.command(name="mute")
     @has_role()
-    async def muteall(self, ctx):
-        if not ctx.author.voice:
-            return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
-
-        count = 0
-        for m in ctx.author.voice.channel.members:
+    async def mute_unified_cmd(self, ctx, target: str = None, member: nextcord.Member = None):
+        """
+        Commande mute unifiée:
+        +mute user @membre   - Mute un membre spécifique
+        +mute all            - Mute tout le salon vocal
+        +mute server          - Mute tout le serveur
+        +mute @membre        - Mute un membre (raccourci)
+        """
+        
+        # Cas 1: +mute user @membre
+        if target == "user" and member:
+            if not ctx.author.voice:
+                return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+            
             try:
-                await m.edit(mute=True)
-                count += 1
-            except:
-                pass
-
-        await ctx.send(embed=embed_msg("🔇 Mute all", f"{count} membres mutés."))
+                await member.edit(mute=True)
+                await ctx.send(embed=embed_msg("🔇 Mute", f"{member.mention} est maintenant mute."))
+            except Exception as e:
+                await ctx.send(embed=embed_msg("❌ Erreur", f"Impossible de mute {member.mention}: {e}", 0xff0000))
+        
+        # Cas 2: +mute all (mute tout le salon vocal)
+        elif target == "all":
+            if not ctx.author.voice:
+                return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+            
+            count = 0
+            for m in ctx.author.voice.channel.members:
+                try:
+                    await m.edit(mute=True)
+                    count += 1
+                except:
+                    pass
+            
+            await ctx.send(embed=embed_msg("🔇 Mute all", f"{count} membres mutés dans le salon."))
+        
+        # Cas 3: +mute server (mute tout le serveur)
+        elif target == "server":
+            count = 0
+            for voice_channel in ctx.guild.voice_channels:
+                for m in voice_channel.members:
+                    try:
+                        await m.edit(mute=True)
+                        count += 1
+                    except:
+                        pass
+            
+            await ctx.send(embed=embed_msg("🔇 Mute serveur", f"{count} membres mutés sur le serveur."))
+        
+        # Cas 4: +mute @membre (raccourci)
+        elif member and not target:
+            if not ctx.author.voice:
+                return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+            
+            try:
+                await member.edit(mute=True)
+                await ctx.send(embed=embed_msg("🔇 Mute", f"{member.mention} est maintenant mute."))
+            except Exception as e:
+                await ctx.send(embed=embed_msg("❌ Erreur", f"Impossible de mute {member.mention}: {e}", 0xff0000))
+        
+        # Cas 5: Aide
+        else:
+            help_embed = nextcord.Embed(
+                title="🔇 Commande Mute",
+                description="Utilisation de la commande `+mute`",
+                color=0x3498db
+            )
+            help_embed.add_field(
+                name="📋 Utilisations",
+                value="`+mute user @membre` - Mute un membre spécifique\n"
+                      "`+mute all` - Mute tout le salon vocal\n"
+                      "`+mute server` - Mute tout le serveur\n"
+                      "`+mute @membre` - Mute un membre (raccourci)",
+                inline=False
+            )
+            await ctx.send(embed=help_embed)
 
     # ============================================================
-    # UNMUTEALL (unmute tout le vocal)
+    # UNMUTE UNIFIÉ (unmute user, all, ou server)
     # ============================================================
-    @commands.command(name="unmuteall")
+    @commands.command(name="unmute")
     @has_role()
-    async def unmuteall(self, ctx):
-        if not ctx.author.voice:
-            return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
-
-        count = 0
-        for m in ctx.author.voice.channel.members:
+    async def unmute_unified_cmd(self, ctx, target: str = None, member: nextcord.Member = None):
+        """
+        Commande unmute unifiée:
+        +unmute user @membre   - Unmute un membre spécifique
+        +unmute all            - Unmute tout le salon vocal
+        +unmute server          - Unmute tout le serveur
+        +unmute @membre        - Unmute un membre (raccourci)
+        """
+        
+        # Cas 1: +unmute user @membre
+        if target == "user" and member:
+            if not ctx.author.voice:
+                return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+            
             try:
-                await m.edit(mute=False)
-                count += 1
-            except:
-                pass
-
-        await ctx.send(embed=embed_msg("🔊 Unmute all", f"{count} membres démutés."))
+                await member.edit(mute=False)
+                await ctx.send(embed=embed_msg("🔊 Unmute", f"{member.mention} est maintenant unmute."))
+            except Exception as e:
+                await ctx.send(embed=embed_msg("❌ Erreur", f"Impossible d'unmute {member.mention}: {e}", 0xff0000))
+        
+        # Cas 2: +unmute all (unmute tout le salon vocal)
+        elif target == "all":
+            if not ctx.author.voice:
+                return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+            
+            count = 0
+            for m in ctx.author.voice.channel.members:
+                try:
+                    await m.edit(mute=False)
+                    count += 1
+                except:
+                    pass
+            
+            await ctx.send(embed=embed_msg("🔊 Unmute all", f"{count} membres unmute dans le salon."))
+        
+        # Cas 3: +unmute server (unmute tout le serveur)
+        elif target == "server":
+            count = 0
+            for voice_channel in ctx.guild.voice_channels:
+                for m in voice_channel.members:
+                    try:
+                        await m.edit(mute=False)
+                        count += 1
+                    except:
+                        pass
+            
+            await ctx.send(embed=embed_msg("🔊 Unmute serveur", f"{count} membres unmute sur le serveur."))
+        
+        # Cas 4: +unmute @membre (raccourci)
+        elif member and not target:
+            if not ctx.author.voice:
+                return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+            
+            try:
+                await member.edit(mute=False)
+                await ctx.send(embed=embed_msg("🔊 Unmute", f"{member.mention} est maintenant unmute."))
+            except Exception as e:
+                await ctx.send(embed=embed_msg("❌ Erreur", f"Impossible d'unmute {member.mention}: {e}", 0xff0000))
+        
+        # Cas 5: Aide
+        else:
+            help_embed = nextcord.Embed(
+                title="🔊 Commande Unmute",
+                description="Utilisation de la commande `+unmute`",
+                color=0x3498db
+            )
+            help_embed.add_field(
+                name="📋 Utilisations",
+                value="`+unmute user @membre` - Unmute un membre spécifique\n"
+                      "`+unmute all` - Unmute tout le salon vocal\n"
+                      "`+unmute server` - Unmute tout le serveur\n"
+                      "`+unmute @membre` - Unmute un membre (raccourci)",
+                inline=False
+            )
+            await ctx.send(embed=help_embed)
 
     # ============================================================
-    # DEAFENALL (deafen tout le vocal)
+    # DEAF UNIFIÉ (deafen user, all, ou server)
     # ============================================================
-    @commands.command(name="deafenall")
+    @commands.command(name="deaf")
     @has_role()
-    async def deafenall(self, ctx):
-        if not ctx.author.voice:
-            return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
-
-        count = 0
-        for m in ctx.author.voice.channel.members:
+    async def deaf(self, ctx, target: str = None, member: nextcord.Member = None):
+        """
+        Commande deafen unifiée:
+        +deaf user @membre   - Deafen un membre spécifique
+        +deaf all            - Deafen tout le salon vocal
+        +deaf server          - Deafen tout le serveur
+        +deaf @membre        - Deafen un membre (raccourci)
+        """
+        
+        # Cas 1: +deaf user @membre
+        if target == "user" and member:
+            if not ctx.author.voice:
+                return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+            
             try:
-                await m.edit(deafen=True)
-                count += 1
-            except:
-                pass
-
-        await ctx.send(embed=embed_msg("🔇 Deafen all", f"{count} membres deafened."))
+                await member.edit(deafen=True)
+                await ctx.send(embed=embed_msg("🔇 Deafen", f"{member.mention} est maintenant deafened."))
+            except Exception as e:
+                await ctx.send(embed=embed_msg("❌ Erreur", f"Impossible de deafen {member.mention}: {e}", 0xff0000))
+        
+        # Cas 2: +deaf all (deafen tout le salon vocal)
+        elif target == "all":
+            if not ctx.author.voice:
+                return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+            
+            count = 0
+            for m in ctx.author.voice.channel.members:
+                try:
+                    await m.edit(deafen=True)
+                    count += 1
+                except:
+                    pass
+            
+            await ctx.send(embed=embed_msg("🔇 Deafen all", f"{count} membres deafened dans le salon."))
+        
+        # Cas 3: +deaf server (deafen tout le serveur)
+        elif target == "server":
+            count = 0
+            for voice_channel in ctx.guild.voice_channels:
+                for m in voice_channel.members:
+                    try:
+                        await m.edit(deafen=True)
+                        count += 1
+                    except:
+                        pass
+            
+            await ctx.send(embed=embed_msg("🔇 Deafen serveur", f"{count} membres deafened sur le serveur."))
+        
+        # Cas 4: +deaf @membre (raccourci)
+        elif member and not target:
+            if not ctx.author.voice:
+                return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+            
+            try:
+                await member.edit(deafen=True)
+                await ctx.send(embed=embed_msg("🔇 Deafen", f"{member.mention} est maintenant deafened."))
+            except Exception as e:
+                await ctx.send(embed=embed_msg("❌ Erreur", f"Impossible de deafen {member.mention}: {e}", 0xff0000))
+        
+        # Cas 5: Aide
+        else:
+            help_embed = nextcord.Embed(
+                title="🔇 Commande Deafen",
+                description="Utilisation de la commande `+deaf`",
+                color=0x3498db
+            )
+            help_embed.add_field(
+                name="📋 Utilisations",
+                value="`+deaf user @membre` - Deafen un membre spécifique\n"
+                      "`+deaf all` - Deafen tout le salon vocal\n"
+                      "`+deaf server` - Deafen tout le serveur\n"
+                      "`+deaf @membre` - Deafen un membre (raccourci)",
+                inline=False
+            )
+            await ctx.send(embed=help_embed)
 
     # ============================================================
-    # UNDEAFENALL (undeafen tout le vocal)
+    # UNDEAFEN UNIFIÉ (undeafen user, all, ou server)
     # ============================================================
-    @commands.command(name="undeafenall")
+    @commands.command(name="undeafen")
     @has_role()
-    async def undeafenall(self, ctx):
-        if not ctx.author.voice:
-            return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
-
-        count = 0
-        for m in ctx.author.voice.channel.members:
+    async def undeafen(self, ctx, target: str = None, member: nextcord.Member = None):
+        """
+        Commande undeafen unifiée:
+        +undeafen user @membre   - Undeafen un membre spécifique
+        +undeafen all            - Undeafen tout le salon vocal
+        +undeafen server          - Undeafen tout le serveur
+        +undeafen @membre        - Undeafen un membre (raccourci)
+        """
+        
+        # Cas 1: +undeafen user @membre
+        if target == "user" and member:
+            if not ctx.author.voice:
+                return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+            
             try:
-                await m.edit(deafen=False)
-                count += 1
-            except:
-                pass
-
-        await ctx.send(embed=embed_msg("🔊 Undeafen all", f"{count} membres réactivés."))
+                await member.edit(deafen=False)
+                await ctx.send(embed=embed_msg("🔊 Undeafen", f"{member.mention} est maintenant undeafened."))
+            except Exception as e:
+                await ctx.send(embed=embed_msg("❌ Erreur", f"Impossible d'undeafen {member.mention}: {e}", 0xff0000))
+        
+        # Cas 2: +undeafen all (undeafen tout le salon vocal)
+        elif target == "all":
+            if not ctx.author.voice:
+                return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+            
+            count = 0
+            for m in ctx.author.voice.channel.members:
+                try:
+                    await m.edit(deafen=False)
+                    count += 1
+                except:
+                    pass
+            
+            await ctx.send(embed=embed_msg("🔊 Undeafen all", f"{count} membres undeafened dans le salon."))
+        
+        # Cas 3: +undeafen server (undeafen tout le serveur)
+        elif target == "server":
+            count = 0
+            for voice_channel in ctx.guild.voice_channels:
+                for m in voice_channel.members:
+                    try:
+                        await m.edit(deafen=False)
+                        count += 1
+                    except:
+                        pass
+            
+            await ctx.send(embed=embed_msg("🔊 Undeafen serveur", f"{count} membres undeafened sur le serveur."))
+        
+        # Cas 4: +undeafen @membre (raccourci)
+        elif member and not target:
+            if not ctx.author.voice:
+                return await ctx.send(embed=embed_msg("❌ Impossible", "Tu dois être en vocal.", 0xff0000))
+            
+            try:
+                await member.edit(deafen=False)
+                await ctx.send(embed=embed_msg("🔊 Undeafen", f"{member.mention} est maintenant undeafened."))
+            except Exception as e:
+                await ctx.send(embed=embed_msg("❌ Erreur", f"Impossible d'undeafen {member.mention}: {e}", 0xff0000))
+        
+        # Cas 5: Aide
+        else:
+            help_embed = nextcord.Embed(
+                title="🔊 Commande Undeafen",
+                description="Utilisation de la commande `+undeafen`",
+                color=0x3498db
+            )
+            help_embed.add_field(
+                name="📋 Utilisations",
+                value="`+undeafen user @membre` - Undeafen un membre spécifique\n"
+                      "`+undeafen all` - Undeafen tout le salon vocal\n"
+                      "`+undeafen server` - Undeafen tout le serveur\n"
+                      "`+undeafen @membre` - Undeafen un membre (raccourci)",
+                inline=False
+            )
+            await ctx.send(embed=help_embed)
 
     # ============================================================
     # SPIN (faire tourner un membre dans plusieurs salons)

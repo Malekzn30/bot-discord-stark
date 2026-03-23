@@ -578,6 +578,13 @@ async def send_category_help(ctx, category_name, commands_list, page=1):
 
 if __name__ == "__main__":
     print("[START] Démarrage du bot Stark...")
+    
+    # Vérifier le TOKEN
+    if not TOKEN:
+        print("[FATAL] TOKEN non trouvé - vérifiez votre fichier .env")
+        exit()
+    else:
+        print(f"[CONFIG] TOKEN trouvé: {TOKEN[:20]}...")
 
     # Lancer Flask
     threading.Thread(target=run_flask).start()
@@ -596,10 +603,12 @@ if __name__ == "__main__":
     # Lancer le bot Discord avec retry logic
     async def start_bot_with_retry():
         async def connect():
+            print("[CONNECT] Tentative de connexion à Discord...")
             return await bot.start(TOKEN)
         
         try:
             await retry_with_backoff(connect, max_retries=3, base_delay=5)
+            print("[SUCCESS] Bot connecté avec succès!")
         except Exception as e:
             print(f"[FATAL] Impossible de démarrer le bot: {e}")
             # Continue anyway to keep Flask server running
