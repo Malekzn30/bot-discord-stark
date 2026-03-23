@@ -367,7 +367,6 @@ async def testchannel(ctx):
 # ============================
 
 from flask import Flask
-from gunicorn.app.wsgiapp import WSGIApplication
 
 app = Flask(__name__)
 
@@ -375,28 +374,9 @@ app = Flask(__name__)
 def home():
     return "Bot Discord en ligne."
 
-class StandaloneApplication(WSGIApplication):
-    def __init__(self, app_uri=None, **kwargs):
-        self.app_uri = app_uri or "app:app"
-        super().__init__(**kwargs)
-    
-    def load_wsgiapp(self):
-        return app
-
 def run_flask():
-    # Configuration pour Render
-    options = {
-        'bind': '0.0.0.0:10000',
-        'workers': 1,
-        'threads': 2,
-        'timeout': 120,
-        'keepalive': 5,
-        'max_requests': 1000,
-        'max_requests_jitter': 100,
-        'preload_app': True,
-    }
-    
-    StandaloneApplication(options=options).run()
+    # Configuration explicite pour Render - évite le scan de ports
+    app.run(host="0.0.0.0", port=10000, debug=False, use_reloader=False)
 
 # ============================
 # KEEP-ALIVE (ANTI-SLEEP)
@@ -624,7 +604,5 @@ if __name__ == "__main__":
             print(f"[FATAL] Impossible de démarrer le bot: {e}")
             # Continue anyway to keep Flask server running
     
-    # Démarrer le bot en arrière-plan
-    bot_thread = threading.Thread(target=lambda: asyncio.run(start_bot_with_retry()))
-    bot_thread.daemon = True
-    bot_thread.start()
+    # Démarrer le bot
+    asyncio.run(start_bot_with_retry())
