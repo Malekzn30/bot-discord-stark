@@ -580,11 +580,19 @@ if __name__ == "__main__":
     print("[START] Démarrage du bot Stark...")
     
     # Vérifier le TOKEN
+    print("[DEBUG] Vérification du TOKEN...")
     if not TOKEN:
         print("[FATAL] TOKEN non trouvé - vérifiez votre fichier .env")
         exit()
     else:
         print(f"[CONFIG] TOKEN trouvé: {TOKEN[:20]}...")
+        print(f"[DEBUG] Longueur du TOKEN: {len(TOKEN)} caractères")
+    
+    # Vérifier les intents
+    print("[DEBUG] Intents configurés:")
+    print(f"  - message_content: {intents.message_content}")
+    print(f"  - members: {intents.members}")
+    print(f"  - guilds: {intents.guilds}")
 
     # Lancer Flask
     threading.Thread(target=run_flask).start()
