@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import gc
 from cog_manager import setup_cog_manager
 import config
+import random
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -48,6 +49,26 @@ def is_channel_allowed(channel):
 # ============================
 # DISCORD BOT - OPTIMISÉ RENDER
 # ============================
+
+# Fonction de retry avec backoff exponentiel
+async def retry_with_backoff(func, max_retries=5, base_delay=1):
+    """Réessaye une fonction avec backoff exponentiel en cas de rate limit"""
+    for attempt in range(max_retries):
+        try:
+            return await func()
+        except nextcord.HTTPException as e:
+            if e.status == 429:  # Rate limit
+                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                print(f"[RATE LIMIT] Attente de {delay:.2f}s (tentative {attempt + 1}/{max_retries})")
+                await asyncio.sleep(delay)
+            else:
+                raise
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise
+            await asyncio.sleep(base_delay)
+    
+    raise Exception("Max retries exceeded")
 
 # Intents optimisés
 intents = nextcord.Intents.default()
@@ -569,5 +590,18 @@ if __name__ == "__main__":
     for cmd in bot.commands:
         print(f"[CMD] {cmd.name}")
 
-    # Lancer le bot Discord
-    bot.run(TOKEN)
+    # Lancer le bot Discord avec retry logic
+    async def start_bot_with_retry():
+        async def connect():
+            return await bot.start(TOKEN)
+        
+        try:
+            await retry_with_backoff(connect, max_retries=3, base_delay=5)
+        except Exception as e:
+            print(f"[FATAL] Impossible de démarrer le bot: {e}")
+            # Continue anyway to keep Flask server running
+    
+    # Démarrer le bot en arrière-plan
+    bot_thread = threading.Thread(target=lambda: asyncio.run(start_bot_with_retry()))
+    bot_thread.daemon = True
+    bot_thread.start()

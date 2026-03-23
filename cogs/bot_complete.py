@@ -2400,38 +2400,6 @@ class BotComplete(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Erreur: {e}")
     
-    @commands.command(name="checkperms")
-    @commands.has_permissions(administrator=True)
-    async def check_perms(self, ctx, member: nextcord.Member = None):
-        """Vérifier les permissions d'un membre"""
-        target = member or ctx.author
-        
-        embed = nextcord.Embed(
-            title="🔐 Permissions",
-            description=f"**Permissions de {target.mention}**",
-            color=0x3498db,
-            timestamp=datetime.datetime.now()
-        )
-        
-        perms = []
-        if target.guild_permissions.administrator:
-            perms.append("👑 Administrateur")
-        if target.guild_permissions.manage_guild:
-            perms.append("⚙️ Gérer le serveur")
-        if target.guild_permissions.manage_channels:
-            perms.append("📚 Gérer les salons")
-        if target.guild_permissions.manage_roles:
-            perms.append("🎭 Gérer les rôles")
-        if target.guild_permissions.kick_members:
-            perms.append("👢 Expulser")
-        if target.guild_permissions.ban_members:
-            perms.append("🔨 Bannir")
-        
-        embed.add_field(name="🔑 Permissions Principales", value="\n".join(perms) or "Aucune permission spéciale", inline=False)
-        
-        embed.set_footer(text=f"Demandé par {ctx.author.name}")
-        await ctx.send(embed=embed)
-    
     # ============= SYSTÈME SOCIAL =============
     @commands.command(name="find")
     async def find(self, ctx, *, username: str):
