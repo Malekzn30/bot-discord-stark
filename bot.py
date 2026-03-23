@@ -595,13 +595,17 @@ if __name__ == "__main__":
     print(f"  - guilds: {intents.guilds}")
 
     # Lancer Flask
+    print("[DEBUG] Démarrage du serveur Flask...")
     threading.Thread(target=run_flask).start()
 
     # Lancer keep-alive
+    print("[DEBUG] Démarrage du keep-alive...")
     threading.Thread(target=keep_alive).start()
 
     # Charger les cogs
+    print("[DEBUG] Chargement des cogs...")
     load_cogs()
+    print("[DEBUG] Cogs chargés avec succès")
     
     # Vérifier les commandes chargées
     print(f"[START] {len(bot.commands)} commandes chargées")
@@ -609,17 +613,19 @@ if __name__ == "__main__":
         print(f"[CMD] {cmd.name}")
 
     # Lancer le bot Discord avec retry logic
+    print("[DEBUG] Préparation du lancement du bot Discord...")
     async def start_bot_with_retry():
         async def connect():
             print("[CONNECT] Tentative de connexion à Discord...")
             return await bot.start(TOKEN)
         
         try:
+            print("[DEBUG] Début du retry avec backoff...")
             await retry_with_backoff(connect, max_retries=3, base_delay=5)
             print("[SUCCESS] Bot connecté avec succès!")
         except Exception as e:
             print(f"[FATAL] Impossible de démarrer le bot: {e}")
             # Continue anyway to keep Flask server running
     
-    # Démarrer le bot
+    print("[DEBUG] Lancement du bot Discord...")
     asyncio.run(start_bot_with_retry())
